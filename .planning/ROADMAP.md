@@ -10,11 +10,11 @@
 ## Phases
 
 - [x] **Phase 1: Shell Foundation** — Working Electron window with React shell, tray icon, close-to-tray, layout toggle (completed 2026-06-18)
-- [ ] **Phase 2: Service Embedding** — All confirmed services embedded with isolated, persistent sessions
-- [ ] **Phase 3: Notifications** — Native Windows toast notifications and taskbar overlay unread badge
-- [ ] **Phase 4: Do Not Disturb** — Global DND toggle from tray and recurring DND schedule
-- [ ] **Phase 5: Service Management** — Drag-to-reorder services and per-service enable/disable toggle
-- [ ] **Phase 6: Google Account Sync** — PKCE OAuth sign-in, Firestore config sync, sign-out
+- [x] **Phase 2: Service Embedding** — All confirmed services embedded with isolated, persistent sessions (completed 2026-06-18)
+- [x] **Phase 3: Notifications** — Native Windows toast notifications and taskbar overlay unread badge (completed 2026-06-18)
+- [x] **Phase 4: Do Not Disturb** — Global DND toggle from tray and recurring DND schedule (completed 2026-06-18)
+- [x] **Phase 5: Service Management** — Drag-to-reorder services and per-service enable/disable toggle (completed 2026-06-18)
+- [x] **Phase 6: Google Account Sync** — PKCE OAuth sign-in, Firestore config sync, sign-out (completed 2026-06-18)
 - [ ] **Phase 7: Packaging and Distribution** — NSIS installer, portable EXE, in-app update notification
 
 ---
@@ -124,11 +124,11 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Shell Foundation | 0/0 | Complete    | 2026-06-18 |
-| 2. Service Embedding | 0/? | Not started | - |
-| 3. Notifications | 0/? | Not started | - |
-| 4. Do Not Disturb | 0/? | Not started | - |
-| 5. Service Management | 0/? | Not started | - |
-| 6. Google Account Sync | 0/? | Not started | - |
+| 2. Service Embedding | 0/0 | Complete    | 2026-06-18 |
+| 3. Notifications | 0/0 | Complete    | 2026-06-18 |
+| 4. Do Not Disturb | 0/0 | Complete    | 2026-06-18 |
+| 5. Service Management | 0/0 | Complete    | 2026-06-18 |
+| 6. Google Account Sync | 1/1 | Complete    | 2026-06-18 |
 | 7. Packaging and Distribution | 0/? | Not started | - |
 
 ---

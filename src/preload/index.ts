@@ -30,7 +30,32 @@ const api = {
   onServicesUpdated: (callback: (services: any[]) => void): void => {
     ipcRenderer.on('services-updated', (_event, services) => callback(services))
   },
-  getAppVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version')
+  getAppVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
+  loginGoogle: (): Promise<{ success: boolean; uid?: string; error?: string }> => ipcRenderer.invoke('login-google'),
+  logoutGoogle: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('logout-google'),
+  getAuthStatus: (): Promise<{ loggedIn: boolean; uid?: string; photoURL?: string }> => ipcRenderer.invoke('get-auth-status'),
+  getGeneralConfig: (): Promise<any> => ipcRenderer.invoke('get-general-config'),
+  setGeneralConfig: (config: any): Promise<void> => ipcRenderer.invoke('set-general-config', config),
+  exportConfig: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('export-config'),
+  importConfig: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('import-config'),
+  clearConfig: (): Promise<void> => ipcRenderer.invoke('clear-config'),
+  checkForUpdates: (): Promise<void> => ipcRenderer.invoke('check-for-updates'),
+  installUpdate: (): Promise<void> => ipcRenderer.invoke('install-update'),
+  onUpdateChecking: (callback: () => void): void => {
+    ipcRenderer.on('update-checking', () => callback())
+  },
+  onUpdateAvailable: (callback: (info: any) => void): void => {
+    ipcRenderer.on('update-available', (_e, info) => callback(info))
+  },
+  onUpdateNotAvailable: (callback: (info: any) => void): void => {
+    ipcRenderer.on('update-not-available', (_e, info) => callback(info))
+  },
+  onUpdateDownloaded: (callback: (info: any) => void): void => {
+    ipcRenderer.on('update-downloaded', (_e, info) => callback(info))
+  },
+  onUpdateError: (callback: (error: string) => void): void => {
+    ipcRenderer.on('update-error', (_e, err) => callback(err))
+  }
 }
 
 // Intercept HTML5 Notification API by injecting an interception script

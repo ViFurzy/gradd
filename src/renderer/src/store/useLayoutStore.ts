@@ -22,6 +22,8 @@ interface LayoutState {
   services: ServiceConfig[]
   activeServiceId: string | null
   activePanel: 'directory' | 'settings' | 'service'
+  authState: { loggedIn: boolean; uid?: string; photoURL?: string }
+  generalConfig: { closeToTray: boolean }
   setLayoutMode: (mode: 'sidebar' | 'tabs') => Promise<void>
   selectService: (id: string | null) => Promise<void>
   toggleService: (id: string) => Promise<void>
@@ -35,6 +37,9 @@ interface LayoutState {
   updateDndConfig: (config: Partial<DndConfig>) => Promise<void>
   setDndActiveState: (active: boolean) => void
   reorderServices: (enabledServices: ServiceConfig[]) => Promise<void>
+  updateGeneralConfig: (config: Partial<{ closeToTray: boolean }>) => Promise<void>
+  loginGoogle: () => Promise<void>
+  logoutGoogle: () => Promise<void>
 }
 
 export const useLayoutStore = create<LayoutState>((set, get) => ({
@@ -42,12 +47,14 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   services: [],
   activeServiceId: null,
   activePanel: 'directory',
+  authState: { loggedIn: false },
   dndConfig: {
     manualActive: false,
     scheduleEnabled: false,
     startTime: '22:00',
     endTime: '08:00'
   },
+  generalConfig: { closeToTray: true },
   isDndActive: false,
   setLayoutMode: async (mode) => {
     set({ layoutMode: mode })
@@ -96,6 +103,8 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       const servicesList = await window.api.getServices()
       const dnd = await window.api.getDndConfig()
       const dndActiveState = await window.api.getDndActive()
+      const authState = await window.api.getAuthStatus()
+      const generalConfig = await window.api.getGeneralConfig()
       
       const servicesWithUnread = servicesList.map((s) => ({
         ...s,
@@ -107,6 +116,8 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         services: servicesWithUnread,
         dndConfig: dnd,
         isDndActive: dndActiveState,
+        authState,
+        generalConfig,
         activePanel: 'directory' // Start on the directory dashboard
       })
 
@@ -131,6 +142,11 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     set({ dndConfig: updated })
     await window.api.setDndConfig(updated)
   },
+  updateGeneralConfig: async (config) => {
+    const updated = { ...get().generalConfig, ...config }
+    set({ generalConfig: updated })
+    await window.api.setGeneralConfig(updated)
+  },
   setDndActiveState: (active) => {
     set({ isDndActive: active })
   },
@@ -139,5 +155,19 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     const updated = [...enabledServices, ...disabledServices]
     set({ services: updated })
     await window.api.saveServices(updated)
+  },
+  loginGoogle: async () => {
+    const result = await window.api.loginGoogle()
+    if (result.success) {
+      set({ authState: { loggedIn: true, uid: result.uid, photoURL: result.photoURL } })
+    } else {
+      console.error(result.error)
+    }
+  },
+  logoutGoogle: async () => {
+    const result = await window.api.logoutGoogle()
+    if (result.success) {
+      set({ authState: { loggedIn: false } })
+    }
   }
 }))

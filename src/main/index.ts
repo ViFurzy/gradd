@@ -4,6 +4,26 @@ import { fileURLToPath } from 'url'
 import { optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { store, DndConfig, defaultServices } from './store.js'
+import { loginWithGoogle, refreshGoogleToken, encryptToken, decryptToken } from './auth.js'
+import { loginToFirebase, logoutFromFirebase, syncConfigToCloud, fetchConfigFromCloud, onCloudConfigChanged } from './firebase.js'
+import pkg from 'electron-updater'
+const { autoUpdater } = pkg
+
+let unsubscribeCloudSync: (() => void) | null = null;
+
+// Helper to push current config to cloud
+async function pushConfigToCloud() {
+  const authState = store.get('auth');
+  if (authState?.uid) {
+    const config = {
+      services: store.get('services'),
+      dnd: store.get('dnd'),
+      layout: store.get('layout')
+    };
+    await syncConfigToCloud(authState.uid, config);
+  }
+}
+
 
 // Set application name and model ID for proper OS notifications and audio branding
 app.setName('Gradd')
@@ -475,11 +495,16 @@ function createWindow(): void {
   mainWindow.on('maximize', queueSaveBounds)
   mainWindow.on('unmaximize', queueSaveBounds)
 
-  // Intercept close to minimize to tray
+  // Intercept close to minimize to tray based on user preference
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
-      e.preventDefault()
-      mainWindow?.hide()
+      const general = store.get('general')
+      const closeToTray = general ? general.closeToTray : true
+      if (closeToTray) {
+        e.preventDefault()
+        mainWindow?.hide()
+      }
+      // If closeToTray is false, it closes normally and triggers app.quit() via window-all-closed
     }
   })
 
@@ -517,6 +542,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('set-layout-mode', (_, mode: 'sidebar' | 'tabs') => {
     store.set('layout.mode', mode)
+    pushConfigToCloud()
   })
 
   ipcMain.handle('get-services', () => {
@@ -526,6 +552,7 @@ app.whenReady().then(() => {
   ipcMain.handle('save-services', (_, services: any[]) => {
     store.set('services', services)
     applyDndState()
+    pushConfigToCloud()
   })
 
   ipcMain.handle('switch-service', (_, id: string | null) => {
@@ -696,6 +723,7 @@ app.whenReady().then(() => {
   ipcMain.handle('set-dnd-config', (_, config: any) => {
     store.set('dnd', config)
     evaluateDndState()
+    pushConfigToCloud()
   })
 
   ipcMain.handle('get-dnd-active', () => {
@@ -716,6 +744,219 @@ app.whenReady().then(() => {
   ipcMain.handle('get-app-version', () => {
     return app.getVersion()
   })
+
+  ipcMain.handle('get-general-config', () => {
+    return store.get('general') || { closeToTray: true }
+  })
+
+  ipcMain.handle('set-general-config', (_, config) => {
+    store.set('general', config)
+    // Cloud sync syncs the whole config, but for simplicity we only push layout/dnd/services currently.
+    // If we want to sync general, we'd add it to pushConfigToCloud. Not strictly required for now.
+    return true
+  })
+
+  ipcMain.handle('login-google', async () => {
+    try {
+      const tokens = await loginWithGoogle();
+      const { uid, photoURL } = await loginToFirebase(tokens.idToken);
+      const encryptedRefresh = encryptToken(tokens.refreshToken);
+      
+      store.set('auth', { uid, photoURL: photoURL || undefined, refreshToken: encryptedRefresh });
+      
+      // Fetch cloud config
+      const cloudConfig = await fetchConfigFromCloud(uid);
+      if (cloudConfig) {
+        if (cloudConfig.services) store.set('services', cloudConfig.services);
+        if (cloudConfig.dnd) store.set('dnd', cloudConfig.dnd);
+        if (cloudConfig.layout) store.set('layout', cloudConfig.layout);
+        if (mainWindow) {
+          mainWindow.webContents.send('services-updated', store.get('services'));
+        }
+      } else {
+        await pushConfigToCloud();
+      }
+
+      setupCloudSyncListener(uid);
+      return { success: true, uid };
+    } catch (err: any) {
+      console.error('Google login failed:', err);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('logout-google', async () => {
+    try {
+      await logoutFromFirebase();
+      store.delete('auth' as any);
+      if (unsubscribeCloudSync) {
+        unsubscribeCloudSync();
+        unsubscribeCloudSync = null;
+      }
+      return { success: true };
+    } catch (err: any) {
+      console.error('Logout failed:', err);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('get-auth-status', () => {
+    const authState = store.get('auth');
+    return authState ? { loggedIn: true, uid: authState.uid, photoURL: authState.photoURL } : { loggedIn: false };
+  });
+
+  // --- Auto Updater Setup ---
+  autoUpdater.autoDownload = false; // We'll trigger download manually if user chooses
+  
+  autoUpdater.on('checking-for-update', () => {
+    mainWindow?.webContents.send('update-checking');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    mainWindow?.webContents.send('update-available', info);
+    // Automatically start download when available
+    autoUpdater.downloadUpdate();
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    mainWindow?.webContents.send('update-not-available', info);
+  });
+
+  autoUpdater.on('error', (err) => {
+    mainWindow?.webContents.send('update-error', err.message);
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    mainWindow?.webContents.send('update-downloaded', info);
+  });
+
+  ipcMain.handle('check-for-updates', async () => {
+    if (!is.dev) {
+      try {
+        await autoUpdater.checkForUpdates();
+      } catch (err) {
+        console.error('Failed to check for updates', err);
+        mainWindow?.webContents.send('update-error', String(err));
+      }
+    } else {
+      // Mock logic for dev environment
+      mainWindow?.webContents.send('update-checking');
+      setTimeout(() => {
+        mainWindow?.webContents.send('update-not-available', { version: app.getVersion() });
+      }, 1500);
+    }
+  });
+
+  ipcMain.handle('install-update', () => {
+    autoUpdater.quitAndInstall();
+  });
+  // --------------------------
+
+  // --- Export / Import Setup ---
+  ipcMain.handle('export-config', async () => {
+    if (!mainWindow) return { success: false, error: 'No main window' };
+    const { canceled, filePath } = await require('electron').dialog.showSaveDialog(mainWindow, {
+      title: 'Export Gradd Configuration',
+      defaultPath: 'gradd-config.json',
+      filters: [{ name: 'JSON Files', extensions: ['json'] }]
+    });
+    
+    if (canceled || !filePath) return { success: false };
+    
+    try {
+      const fs = require('fs');
+      const dataToExport = {
+        services: store.get('services'),
+        dnd: store.get('dnd'),
+        layout: store.get('layout'),
+        general: store.get('general')
+      };
+      fs.writeFileSync(filePath, JSON.stringify(dataToExport, null, 2), 'utf-8');
+      return { success: true };
+    } catch (err) {
+      console.error('Export failed:', err);
+      return { success: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('import-config', async () => {
+    if (!mainWindow) return { success: false, error: 'No main window' };
+    const { canceled, filePaths } = await require('electron').dialog.showOpenDialog(mainWindow, {
+      title: 'Import Gradd Configuration',
+      filters: [{ name: 'JSON Files', extensions: ['json'] }],
+      properties: ['openFile']
+    });
+
+    if (canceled || filePaths.length === 0) return { success: false };
+
+    try {
+      const fs = require('fs');
+      const rawData = fs.readFileSync(filePaths[0], 'utf-8');
+      const parsedData = JSON.parse(rawData);
+
+      // Apply imported data
+      if (parsedData.services) store.set('services', parsedData.services);
+      if (parsedData.dnd) store.set('dnd', parsedData.dnd);
+      if (parsedData.layout) store.set('layout', parsedData.layout);
+      if (parsedData.general) store.set('general', parsedData.general);
+
+      // Force UI refresh and state sync
+      mainWindow.webContents.send('services-updated', store.get('services'));
+      evaluateDndState();
+      pushConfigToCloud();
+
+      // Trigger app restart to cleanly apply layout and service changes
+      app.relaunch();
+      app.exit(0);
+
+      return { success: true };
+    } catch (err) {
+      console.error('Import failed:', err);
+      return { success: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('clear-config', () => {
+    store.clear();
+    app.relaunch();
+    app.exit(0);
+  });
+  // -----------------------------
+
+  function setupCloudSyncListener(uid: string) {
+    if (unsubscribeCloudSync) unsubscribeCloudSync();
+    unsubscribeCloudSync = onCloudConfigChanged(uid, (remoteConfig) => {
+      // Basic merge: incoming changes override local
+      if (remoteConfig) {
+        // Skip updating if identical to avoid loop (simplified)
+        if (remoteConfig.services) store.set('services', remoteConfig.services);
+        if (remoteConfig.dnd) {
+          store.set('dnd', remoteConfig.dnd);
+          evaluateDndState();
+        }
+        if (remoteConfig.layout) store.set('layout', remoteConfig.layout);
+        if (mainWindow) mainWindow.webContents.send('services-updated', store.get('services'));
+      }
+    });
+  }
+
+  // Auto-login on startup if token exists
+  setTimeout(async () => {
+    const auth = store.get('auth');
+    if (auth && auth.refreshToken) {
+      try {
+        const newTokens = await refreshGoogleToken(decryptToken(auth.refreshToken));
+        const { uid, photoURL } = await loginToFirebase(newTokens.idToken);
+        if (uid === auth.uid) {
+          store.set('auth.photoURL', photoURL || undefined);
+          setupCloudSyncListener(uid);
+          console.log(`[Main] Auto-login restored session for UID: ${uid}`);
+        }
+      } catch (err) {
+        console.error('[Main] Auto-login failed:', err);
+      }
+    }
+  }, 1000);
 
   // Periodically evaluate DND state (every 30 seconds)
   setInterval(evaluateDndState, 30000)

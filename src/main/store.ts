@@ -31,6 +31,15 @@ export interface AppConfig {
   }
   services: ServiceConfig[]
   dnd: DndConfig
+  auth?: {
+    uid: string;
+    email?: string;
+    photoURL?: string;
+    refreshToken: string; // encrypted
+  }
+  general: {
+    closeToTray: boolean;
+  }
 }
 
 export const defaultServices: ServiceConfig[] = [
@@ -68,7 +77,7 @@ export const defaultServices: ServiceConfig[] = [
   },
   {
     id: 'instagram',
-    name: 'Instagram Direct',
+    name: 'Instagram',
     type: 'instagram',
     url: 'https://www.instagram.com/direct/inbox/',
     enabled: false,
@@ -103,9 +112,28 @@ export const store = new Store<AppConfig>({
       scheduleEnabled: false,
       startTime: '22:00',
       endTime: '08:00'
+    },
+    general: {
+      closeToTray: true
     }
   }
 })
+
+// Migration to fix 'Instagram Direct' naming
+const existingServices = store.get('services')
+if (existingServices && Array.isArray(existingServices)) {
+  let changed = false
+  const migratedServices = existingServices.map((s) => {
+    if (s.name === 'Instagram Direct') {
+      changed = true
+      return { ...s, name: 'Instagram' }
+    }
+    return s
+  })
+  if (changed) {
+    store.set('services', migratedServices)
+  }
+}
 
 // Ensure any new default services are merged into the existing configuration
 try {

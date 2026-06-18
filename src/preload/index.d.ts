@@ -29,6 +29,21 @@ export interface GraddAPI {
   onDndStatusChanged(callback: (active: boolean) => void): void
   onServicesUpdated(callback: (services: ServiceConfig[]) => void): void
   getAppVersion(): Promise<string>
+  loginGoogle(): Promise<{ success: boolean; uid?: string; error?: string; photoURL?: string }>
+  logoutGoogle(): Promise<{ success: boolean; error?: string }>
+  getAuthStatus(): Promise<{ loggedIn: boolean; uid?: string; photoURL?: string }>
+  getGeneralConfig(): Promise<{ closeToTray: boolean }>
+  setGeneralConfig(config: { closeToTray: boolean }): Promise<void>
+  exportConfig(): Promise<{ success: boolean; error?: string }>
+  importConfig(): Promise<{ success: boolean; error?: string }>
+  clearConfig(): Promise<void>
+  checkForUpdates(): Promise<void>
+  installUpdate(): Promise<void>
+  onUpdateChecking(callback: () => void): void
+  onUpdateAvailable(callback: (info: any) => void): void
+  onUpdateNotAvailable(callback: (info: any) => void): void
+  onUpdateDownloaded(callback: (info: any) => void): void
+  onUpdateError(callback: (error: string) => void): void
 }
 
 export interface DndConfig {

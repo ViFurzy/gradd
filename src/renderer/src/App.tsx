@@ -12,15 +12,17 @@ import {
   SpeakerHigh,
   SpeakerSlash,
   ArrowClockwise,
-  Check
+  Check,
+  FloppyDisk
 } from '@phosphor-icons/react'
 import { useLayoutStore } from './store/useLayoutStore'
 
-// Import downloaded official brand SVG assets
 import messengerLogo from './assets/messenger.svg'
 import whatsappLogo from './assets/whatsapp.svg'
 import telegramLogo from './assets/telegram.svg'
 import slackLogo from './assets/slack.svg'
+import instagramLogo from './assets/instagram.png'
+import gadugaduLogo from './assets/gadugadu.svg'
 import logoImg from './assets/logo.png'
 
 function App(): React.JSX.Element {
@@ -37,11 +39,35 @@ function App(): React.JSX.Element {
     setServiceUnreadCount,
     isDndActive,
     setDndActiveState,
-    reorderServices
+    reorderServices,
+    authState
   } = useLayoutStore()
   const [hoveredToggle, setHoveredToggle] = useState(false)
   const [draggedServiceId, setDraggedServiceId] = useState<string | null>(null)
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
+  const profileMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setIsProfileMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleLogout = async () => {
+    const clearSetup = window.confirm(
+      'You are about to log out.\n\nDo you want to CLEAR your local setup/data? Press OK to clear everything and reset to default, or Cancel to keep your settings.'
+    )
+    if (clearSetup) {
+      await window.api.clearConfig()
+    } else {
+      await logoutGoogle()
+    }
+  }
 
   const totalUnreadCount = services
     .filter((s) => s.enabled)
@@ -161,9 +187,9 @@ function App(): React.JSX.Element {
       case 'slack':
         return <img src={slackLogo} className="w-5 h-5 object-contain" alt="Slack" />
       case 'instagram':
-        return <InstagramLogo size={20} weight="bold" />
+        return <img src={instagramLogo} className="w-5 h-5 object-contain" alt="Instagram" />
       case 'gadugadu':
-        return <ChatTeardropText size={20} weight="bold" />
+        return <img src={gadugaduLogo} className="w-5 h-5 object-contain" alt="Gadu-Gadu" />
       default:
         return <Chats size={20} weight="bold" />
     }
@@ -179,7 +205,7 @@ function App(): React.JSX.Element {
         className="h-8 min-h-8 bg-secondary border-b border-surface-border flex items-center justify-between px-4 drag"
       >
         <div className="flex items-center gap-2">
-          <img src={logoImg} className="w-3.5 h-3.5 object-contain select-none pointer-events-none" alt="" />
+          <img src={logoImg} className="w-3.5 h-3.5 scale-110 object-contain select-none pointer-events-none" alt="" />
           <span className="text-[11px] font-semibold text-text-muted leading-[1.3]">Gradd</span>
           {isDndActive && (
             <div className="flex items-center gap-1 bg-accent/20 border border-accent/30 text-accent px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold tracking-wide animate-pulse">
@@ -219,7 +245,7 @@ function App(): React.JSX.Element {
                   )}
                   <img
                     src={logoImg}
-                    className="w-5.5 h-5.5 object-contain select-none pointer-events-none"
+                    className="w-5.5 h-5.5 scale-110 object-contain select-none pointer-events-none"
                     alt=""
                   />
                 </button>
@@ -231,55 +257,61 @@ function App(): React.JSX.Element {
                   const isActive = activeServiceId === service.id && activePanel === 'service'
                   const isDragged = draggedServiceId === service.id
                   return (
-                    <button
-                      key={service.id}
-                      onClick={() => selectService(service.id)}
-                      onContextMenu={(e) => {
-                        e.preventDefault()
-                        window.api.showServiceContextMenu(service.id)
-                      }}
-                      draggable="true"
-                      onDragStart={() => setDraggedServiceId(service.id)}
-                      onDragEnd={() => setDraggedServiceId(null)}
-                      onDragOver={(e) => {
-                        e.preventDefault()
-                        if (draggedServiceId === null || draggedServiceId === service.id) return
-                        
-                        const draggedIdx = enabledServices.findIndex((s) => s.id === draggedServiceId)
-                        const hoverIdx = index
-                        if (draggedIdx === -1) return
-                        
-                        const updated = [...enabledServices]
-                        const [draggedItem] = updated.splice(draggedIdx, 1)
-                        updated.splice(hoverIdx, 0, draggedItem)
-                        
-                        reorderServices(updated)
-                      }}
-                      className={`no-drag relative w-14 h-11 flex items-center justify-center transition-all duration-150 cursor-grab active:cursor-grabbing ${
-                        isActive
-                          ? 'bg-active-surface text-icon-active'
-                          : 'bg-transparent text-icon-default hover:bg-hover-surface hover:text-icon-active'
-                      } ${isDragged ? 'opacity-30 scale-95 bg-active-surface/30' : ''}`}
-                      title={service.name}
-                    >
-                      {/* Active indicator strip */}
-                      {isActive && (
-                        <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent rounded-r-[2px]" />
+                    <React.Fragment key={service.id}>
+                      <button
+                        onClick={() => selectService(service.id)}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          window.api.showServiceContextMenu(service.id)
+                        }}
+                        draggable="true"
+                        onDragStart={() => setDraggedServiceId(service.id)}
+                        onDragEnd={() => setDraggedServiceId(null)}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          if (draggedServiceId === null || draggedServiceId === service.id) return
+                          
+                          const draggedIdx = enabledServices.findIndex((s) => s.id === draggedServiceId)
+                          const hoverIdx = index
+                          if (draggedIdx === -1) return
+                          
+                          const updated = [...enabledServices]
+                          const [draggedItem] = updated.splice(draggedIdx, 1)
+                          updated.splice(hoverIdx, 0, draggedItem)
+                          
+                          reorderServices(updated)
+                        }}
+                        className={`no-drag relative w-14 h-11 flex items-center justify-center transition-all duration-150 cursor-grab active:cursor-grabbing ${
+                          isActive
+                            ? 'bg-active-surface text-icon-active'
+                            : 'bg-transparent text-icon-default hover:bg-hover-surface hover:text-icon-active'
+                        } ${isDragged ? 'opacity-30 scale-95 bg-active-surface/30' : ''}`}
+                        title={service.name}
+                      >
+                        {/* Active indicator strip */}
+                        {isActive && (
+                          <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent rounded-r-[2px]" />
+                        )}
+                        {getServiceIcon(service.type)}
+                        {/* Unread badge */}
+                        {service.unreadCount && service.unreadCount > 0 ? (
+                          <div className="absolute top-1.5 right-2 min-w-[15px] h-3.5 bg-destructive text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 shadow border border-secondary leading-none select-none">
+                            {service.unreadCount}
+                          </div>
+                        ) : null}
+                        {/* Mute indicator */}
+                        {service.muted ? (
+                          <div className="absolute bottom-1.5 right-2 text-[#e5534b] flex items-center justify-center pointer-events-none">
+                            <SpeakerSlash size={11} weight="bold" />
+                          </div>
+                        ) : null}
+                      </button>
+                      {/* Invisible Spacer */}
+                      <div className="w-full h-1" />
+                      {index < enabledServices.length - 1 && (
+                        <div className="w-6 h-px bg-white/5 my-0.5 pointer-events-none" />
                       )}
-                      {getServiceIcon(service.type)}
-                      {/* Unread badge */}
-                      {service.unreadCount && service.unreadCount > 0 ? (
-                        <div className="absolute top-1.5 right-2 min-w-[15px] h-3.5 bg-destructive text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 shadow border border-secondary leading-none select-none">
-                          {service.unreadCount}
-                        </div>
-                      ) : null}
-                      {/* Mute indicator */}
-                      {service.muted ? (
-                        <div className="absolute bottom-1.5 right-2 text-[#e5534b] flex items-center justify-center pointer-events-none">
-                          <SpeakerSlash size={11} weight="bold" />
-                        </div>
-                      ) : null}
-                    </button>
+                    </React.Fragment>
                   )
                 })}
               </div>
@@ -328,6 +360,41 @@ function App(): React.JSX.Element {
                 >
                   <Gear size={20} weight="bold" />
                 </button>
+
+                {/* Google Account Profile Picture */}
+                {authState.loggedIn && authState.photoURL && (
+                  <div className="mt-1 pt-3 pb-2 border-t border-surface-border/50 flex justify-center w-full relative" ref={profileMenuRef}>
+                    <button
+                      onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                      className="no-drag w-7 h-7 rounded-full overflow-hidden border border-surface-border cursor-pointer hover:border-accent transition-all duration-150"
+                      title="Google Account"
+                    >
+                      <img 
+                        src={authState.photoURL} 
+                        className="w-full h-full object-cover select-none pointer-events-none" 
+                        alt="Google Profile" 
+                      />
+                    </button>
+
+                    {isProfileMenuOpen && (
+                      <div className="absolute left-14 bottom-0 mb-2 w-36 bg-secondary border border-surface-border rounded shadow-lg flex flex-col z-50 overflow-hidden">
+                        <button 
+                          onClick={() => { setIsProfileMenuOpen(false); showSettings(); }} 
+                          className="px-4 py-2 text-left text-xs font-semibold text-text-primary hover:bg-hover-surface transition-colors cursor-pointer"
+                        >
+                          Settings
+                        </button>
+                        <div className="w-full h-px bg-surface-border" />
+                        <button 
+                          onClick={() => { setIsProfileMenuOpen(false); handleLogout(); }} 
+                          className="px-4 py-2 text-left text-xs font-semibold text-[#e5534b] hover:bg-hover-surface transition-colors cursor-pointer"
+                        >
+                          Log Out
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </aside>
 
@@ -366,50 +433,54 @@ function App(): React.JSX.Element {
                   const isActive = activeServiceId === service.id && activePanel === 'service'
                   const isDragged = draggedServiceId === service.id
                   return (
-                    <button
-                      key={service.id}
-                      onClick={() => selectService(service.id)}
-                      onContextMenu={(e) => {
-                        e.preventDefault()
-                        window.api.showServiceContextMenu(service.id)
-                      }}
-                      draggable="true"
-                      onDragStart={() => setDraggedServiceId(service.id)}
-                      onDragEnd={() => setDraggedServiceId(null)}
-                      onDragOver={(e) => {
-                        e.preventDefault()
-                        if (draggedServiceId === null || draggedServiceId === service.id) return
-                        
-                        const draggedIdx = enabledServices.findIndex((s) => s.id === draggedServiceId)
-                        const hoverIdx = index
-                        if (draggedIdx === -1) return
-                        
-                        const updated = [...enabledServices]
-                        const [draggedItem] = updated.splice(draggedIdx, 1)
-                        updated.splice(hoverIdx, 0, draggedItem)
-                        
-                        reorderServices(updated)
-                      }}
-                      className={`no-drag relative h-full flex items-center gap-2 px-4 transition-all duration-150 cursor-grab active:cursor-grabbing border-b-2 ${
-                        isActive
-                          ? 'border-accent text-text-primary bg-active-surface/30'
-                          : 'border-transparent text-text-muted hover:bg-hover-surface hover:text-text-primary'
-                      } ${isDragged ? 'opacity-30 scale-95 bg-active-surface/30' : ''}`}
-                    >
-                      <span className="flex items-center text-sm">
-                        {getServiceIcon(service.type)}
-                      </span>
-                      <span className="text-xs font-normal leading-[1.4]">{service.name}</span>
-                      {service.muted && (
-                        <SpeakerSlash size={12} weight="bold" className="text-[#e5534b] flex-shrink-0" />
-                      )}
-                      {/* Unread badge */}
-                      {service.unreadCount && service.unreadCount > 0 ? (
-                        <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-destructive text-white leading-none shadow select-none">
-                          {service.unreadCount}
+                    <React.Fragment key={service.id}>
+                      <button
+                        onClick={() => selectService(service.id)}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          window.api.showServiceContextMenu(service.id)
+                        }}
+                        draggable="true"
+                        onDragStart={() => setDraggedServiceId(service.id)}
+                        onDragEnd={() => setDraggedServiceId(null)}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          if (draggedServiceId === null || draggedServiceId === service.id) return
+                          
+                          const draggedIdx = enabledServices.findIndex((s) => s.id === draggedServiceId)
+                          const hoverIdx = index
+                          if (draggedIdx === -1) return
+                          
+                          const updated = [...enabledServices]
+                          const [draggedItem] = updated.splice(draggedIdx, 1)
+                          updated.splice(hoverIdx, 0, draggedItem)
+                          
+                          reorderServices(updated)
+                        }}
+                        className={`no-drag relative h-full flex items-center gap-2 px-4 transition-all duration-150 cursor-grab active:cursor-grabbing border-b-2 ${
+                          isActive
+                            ? 'border-accent text-text-primary bg-active-surface/30'
+                            : 'border-transparent text-text-muted hover:bg-hover-surface hover:text-text-primary'
+                        } ${isDragged ? 'opacity-30 scale-95 bg-active-surface/30' : ''}`}
+                      >
+                        <span className="flex items-center text-sm">
+                          {getServiceIcon(service.type)}
                         </span>
-                      ) : null}
-                    </button>
+                        <span className="text-xs font-normal leading-[1.4]">{service.name}</span>
+                        {service.muted && (
+                          <SpeakerSlash size={12} weight="bold" className="text-[#e5534b] flex-shrink-0" />
+                        )}
+                        {/* Unread badge */}
+                        {service.unreadCount && service.unreadCount > 0 ? (
+                          <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-destructive text-white leading-none shadow select-none">
+                            {service.unreadCount}
+                          </span>
+                        ) : null}
+                      </button>
+                      {index < enabledServices.length - 1 && (
+                        <div className="w-px h-5 bg-white/5 mx-0.5 pointer-events-none" />
+                      )}
+                    </React.Fragment>
                   )
                 })}
               </div>
@@ -446,6 +517,41 @@ function App(): React.JSX.Element {
                 >
                   <Gear size={18} weight="bold" />
                 </button>
+
+                {/* Google Account Profile Picture */}
+                {authState.loggedIn && authState.photoURL && (
+                  <div className="ml-1 pl-2 border-l border-surface-border/50 flex items-center h-full relative" ref={layoutMode === 'tabs' ? profileMenuRef : null}>
+                    <button
+                      onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                      className="no-drag w-6 h-6 rounded-full overflow-hidden border border-surface-border cursor-pointer hover:border-accent transition-all duration-150"
+                      title="Google Account"
+                    >
+                      <img 
+                        src={authState.photoURL} 
+                        className="w-full h-full object-cover select-none pointer-events-none" 
+                        alt="Google Profile" 
+                      />
+                    </button>
+
+                    {isProfileMenuOpen && layoutMode === 'tabs' && (
+                      <div className="absolute right-0 top-full mt-2 w-36 bg-secondary border border-surface-border rounded shadow-lg flex flex-col z-50 overflow-hidden">
+                        <button 
+                          onClick={() => { setIsProfileMenuOpen(false); showSettings(); }} 
+                          className="px-4 py-2 text-left text-xs font-semibold text-text-primary hover:bg-hover-surface transition-colors cursor-pointer"
+                        >
+                          Settings
+                        </button>
+                        <div className="w-full h-px bg-surface-border" />
+                        <button 
+                          onClick={() => { setIsProfileMenuOpen(false); handleLogout(); }} 
+                          className="px-4 py-2 text-left text-xs font-semibold text-[#e5534b] hover:bg-hover-surface transition-colors cursor-pointer"
+                        >
+                          Log Out
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -465,7 +571,7 @@ function App(): React.JSX.Element {
 }
 
 function DirectoryDashboard(): React.JSX.Element {
-  const { services, toggleService, selectService, toggleMuteService } = useLayoutStore()
+  const { services, toggleService, selectService, toggleMuteService, authState, showSettings } = useLayoutStore()
   const [clearingServiceIds, setClearingServiceIds] = useState<Record<string, boolean>>({})
 
   const handleClearService = async (serviceId: string, name: string): Promise<void> => {
@@ -497,9 +603,9 @@ function DirectoryDashboard(): React.JSX.Element {
       case 'slack':
         return <img src={slackLogo} className="w-8 h-8 object-contain" alt="Slack" />
       case 'instagram':
-        return <InstagramLogo size={28} weight="bold" className="text-[#E1306C]" />
+        return <img src={instagramLogo} className="w-8 h-8 object-contain" alt="Instagram" />
       case 'gadugadu':
-        return <ChatTeardropText size={28} weight="bold" className="text-[#FFD700]" />
+        return <img src={gadugaduLogo} className="w-8 h-8 object-contain" alt="Gadu-Gadu" />
       default:
         return <Chats size={28} weight="bold" className="text-[#006AFF]" />
     }
@@ -520,6 +626,43 @@ function DirectoryDashboard(): React.JSX.Element {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {!authState.loggedIn ? (
+          <div className="col-span-1 md:col-span-2 bg-accent/10 border border-accent/20 rounded-lg p-5 flex flex-col md:flex-row items-start md:items-center justify-between mb-2 gap-4">
+            <div className="flex items-center gap-3">
+              <Cloud size={24} weight="bold" className="text-accent flex-shrink-0" />
+              <div>
+                <h3 className="text-sm font-semibold text-accent leading-[1.2]">Enable Cloud Sync</h3>
+                <p className="text-xs text-text-muted mt-1 leading-[1.4]">
+                  If you want to securely backup your layouts, DND schedules, and settings across devices, just log in via Google!
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={showSettings}
+              className="no-drag whitespace-nowrap px-4 py-2 bg-accent/20 hover:bg-accent/30 text-accent border border-accent/30 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer"
+            >
+              Go to Settings
+            </button>
+          </div>
+        ) : (
+          <div className="col-span-1 md:col-span-2 bg-active-surface/50 border border-surface-border rounded-lg p-5 flex flex-col md:flex-row items-start md:items-center justify-between mb-2 gap-4">
+            <div className="flex items-center gap-3">
+              <Cloud size={24} weight="bold" className="text-accent flex-shrink-0" />
+              <div>
+                <h3 className="text-sm font-semibold text-text-primary leading-[1.2]">Cloud Sync Active</h3>
+                <p className="text-xs text-text-muted mt-1 leading-[1.4]">
+                  Your settings are currently being backed up and synced to your Google account.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={showSettings}
+              className="no-drag whitespace-nowrap px-4 py-2 bg-secondary hover:bg-hover-surface text-text-primary border border-surface-border text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer"
+            >
+              Manage Settings
+            </button>
+          </div>
+        )}
         {services.map((service) => {
           const isEnabled = service.enabled
           const isClearing = clearingServiceIds[service.id]
@@ -602,25 +745,38 @@ function DirectoryDashboard(): React.JSX.Element {
 }
 
 function SettingsPanel(): React.JSX.Element {
-  const { layoutMode, setLayoutMode, dndConfig, isDndActive, updateDndConfig } = useLayoutStore()
+  const { layoutMode, setLayoutMode, dndConfig, isDndActive, updateDndConfig, authState, loginGoogle, logoutGoogle, generalConfig, updateGeneralConfig } = useLayoutStore()
   const [clearingState, setClearingState] = useState<'idle' | 'clearing' | 'success'>('idle')
   const [appVersion, setAppVersion] = useState<string>('0.0.0')
-  const [checkingState, setCheckingState] = useState<'idle' | 'checking' | 'up-to-date'>('idle')
+  const [checkingState, setCheckingState] = useState<'idle' | 'checking' | 'up-to-date' | 'available' | 'downloaded' | 'error'>('idle')
+  const [updateError, setUpdateError] = useState<string>('')
 
   useEffect(() => {
     window.api.getAppVersion()
       .then((v) => setAppVersion(v))
       .catch((err) => console.error('Failed to get app version:', err))
+
+    window.api.onUpdateChecking(() => setCheckingState('checking'))
+    window.api.onUpdateAvailable(() => setCheckingState('available'))
+    window.api.onUpdateNotAvailable(() => {
+      setCheckingState('up-to-date')
+      setTimeout(() => setCheckingState('idle'), 5000)
+    })
+    window.api.onUpdateDownloaded(() => setCheckingState('downloaded'))
+    window.api.onUpdateError((err) => {
+      setCheckingState('error')
+      setUpdateError(err)
+      setTimeout(() => setCheckingState('idle'), 5000)
+    })
   }, [])
 
   const handleCheckUpdates = (): void => {
+    if (checkingState === 'downloaded') {
+      window.api.installUpdate()
+      return
+    }
     setCheckingState('checking')
-    setTimeout(() => {
-      setCheckingState('up-to-date')
-      setTimeout(() => {
-        setCheckingState('idle')
-      }, 4000)
-    }, 1500)
+    window.api.checkForUpdates()
   }
 
   const handleClearSessions = async (): Promise<void> => {
@@ -648,87 +804,131 @@ function SettingsPanel(): React.JSX.Element {
       </div>
 
       <div className="flex flex-col gap-6">
-        {/* Section 1: General Preferences */}
+
+
+        {/* Section 1: Behavior */}
         <section className="bg-secondary border border-surface-border rounded-lg p-5 flex flex-col gap-4">
           <div className="flex items-center gap-3">
             <Desktop size={20} weight="bold" className="text-accent" />
             <h2 className="text-sm font-semibold text-text-primary leading-[1.2]">
-              General Preferences
+              General Behavior
             </h2>
           </div>
+
+          {/* Close to Tray Toggle */}
           <div className="flex items-center justify-between border-t border-surface-border/50 pt-4 mt-1">
             <div>
-              <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">Layout Mode</h3>
-              <p className="text-xs text-text-muted mt-1 leading-[1.4]">
-                Choose how your messaging service icons are structured.
+              <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">
+                Keep running in background
+              </h3>
+              <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
+                When enabled, closing the window will minimize Gradd to the system tray. 
+                When disabled, closing the window will fully quit the app.
               </p>
             </div>
-            <div className="flex bg-dominant border border-surface-border rounded p-0.5">
-              <button
-                onClick={() => setLayoutMode('sidebar')}
-                className={`no-drag px-3 py-1.5 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer ${
-                  layoutMode === 'sidebar'
-                    ? 'bg-active-surface text-accent'
-                    : 'text-text-muted hover:text-text-primary'
+            <button
+              onClick={() => updateGeneralConfig({ closeToTray: !generalConfig?.closeToTray })}
+              className={`no-drag relative w-10 h-6 rounded-full transition-colors duration-150 cursor-pointer focus:outline-none ${
+                generalConfig?.closeToTray !== false ? 'bg-accent' : 'bg-dominant border border-surface-border'
+              }`}
+            >
+              <div
+                className={`absolute top-[3px] left-[3px] w-4.5 h-4.5 rounded-full bg-text-primary shadow transform transition-transform duration-150 ${
+                  generalConfig?.closeToTray !== false ? 'translate-x-4' : 'translate-x-0'
                 }`}
-              >
-                Sidebar
-              </button>
-              <button
-                onClick={() => setLayoutMode('tabs')}
-                className={`no-drag px-3 py-1.5 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer ${
-                  layoutMode === 'tabs'
-                    ? 'bg-active-surface text-accent'
-                    : 'text-text-muted hover:text-text-primary'
-                }`}
-              >
-                Tabs
-              </button>
-            </div>
+              />
+            </button>
           </div>
         </section>
 
-        {/* Section 2: Session Management */}
+        {/* Section 1.5: Cloud Sync */}
         <section className="bg-secondary border border-surface-border rounded-lg p-5 flex flex-col gap-4">
           <div className="flex items-center gap-3">
-            <Trash size={20} weight="bold" className="text-[#e5534b]" />
+            <Cloud size={20} weight="bold" className="text-accent" />
             <h2 className="text-sm font-semibold text-text-primary leading-[1.2]">
-              Cache & Session Management
+              Cloud Sync
             </h2>
           </div>
           <div className="flex items-center justify-between border-t border-surface-border/50 pt-4 mt-1">
             <div>
               <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">
-                Reset Application Sessions
+                Google Account Sync
               </h3>
               <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
-                Clears all logged-in sessions, cookies, local cache, and history for all embedded services.
+                {authState.loggedIn 
+                  ? `Signed in. Your layouts and configurations are automatically synced to the cloud.`
+                  : `Sign in with Google to sync your service layout, DND configurations, and settings to the cloud.`}
               </p>
             </div>
             <div>
+              {authState.loggedIn ? (
+                <button
+                  onClick={() => handleLogout()}
+                  className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none bg-dominant hover:bg-hover-surface text-text-primary border border-surface-border"
+                >
+                  Sign Out
+                </button>
+              ) : (
+                <button
+                  onClick={() => loginGoogle()}
+                  className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30"
+                >
+                  Sign in with Google
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* Section 1.6: Local Backup */}
+        <section className="bg-secondary border border-surface-border rounded-lg p-5 flex flex-col gap-4">
+          <div className="flex items-center gap-3">
+            <FloppyDisk size={20} weight="bold" className="text-accent" />
+            <h2 className="text-sm font-semibold text-text-primary leading-[1.2]">
+              Local Backup & Restore
+            </h2>
+          </div>
+          <div className="flex items-center justify-between border-t border-surface-border/50 pt-4 mt-1">
+            <div>
+              <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">
+                Export / Import Configuration
+              </h3>
+              <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
+                Manually save your exact setup (services, layouts, and DND states) to a local file, or load an existing one.
+              </p>
+            </div>
+            <div className="flex gap-2">
               <button
-                onClick={handleClearSessions}
-                disabled={clearingState !== 'idle'}
-                className={`no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none ${
-                  clearingState === 'clearing'
-                    ? 'bg-hover-surface text-text-muted cursor-not-allowed'
-                    : clearingState === 'success'
-                      ? 'bg-green-600/20 text-green-400 border border-green-500/30'
-                      : 'bg-destructive/10 hover:bg-destructive/20 text-destructive'
-                }`}
+                onClick={async () => {
+                  const res = await window.api.exportConfig();
+                  if (res.success) {
+                    alert('Configuration exported successfully!');
+                  } else if (res.error) {
+                    alert('Export failed: ' + res.error);
+                  }
+                }}
+                className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none bg-dominant hover:bg-hover-surface text-text-primary border border-surface-border"
               >
-                {clearingState === 'clearing' && 'Clearing...'}
-                {clearingState === 'success' && 'Sessions Cleared!'}
-                {clearingState === 'idle' && 'Clear Sessions'}
+                Export Config
+              </button>
+              <button
+                onClick={async () => {
+                  const res = await window.api.importConfig();
+                  if (res.success) {
+                    // App will automatically restart
+                  } else if (res.error) {
+                    alert('Import failed: ' + res.error);
+                  }
+                }}
+                className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30"
+              >
+                Import Config
               </button>
             </div>
           </div>
-          {clearingState === 'success' && (
-            <div className="text-xs text-green-400 font-normal leading-[1.4] mt-2">
-              Application caches cleared. Please close and relaunch Gradd to sign in again.
-            </div>
-          )}
         </section>
+
+        {/* Old Cache section removed here */}
 
         {/* Section 3: Do Not Disturb */}
         <section className={`bg-secondary border rounded-lg p-5 flex flex-col gap-4 transition-all duration-150 ${
@@ -821,53 +1021,46 @@ function SettingsPanel(): React.JSX.Element {
           </div>
         </section>
 
+        {/* Section 4: Cache & Session Management */}
         <section className="bg-secondary border border-surface-border rounded-lg p-5 flex flex-col gap-4">
           <div className="flex items-center gap-3">
-            <SpeakerHigh size={20} weight="bold" className="text-accent" />
+            <Trash size={20} weight="bold" className="text-[#e5534b]" />
             <h2 className="text-sm font-semibold text-text-primary leading-[1.2]">
-              Audio & Notifications Test
+              Cache & Session Management
             </h2>
           </div>
           <div className="flex items-center justify-between border-t border-surface-border/50 pt-4 mt-1">
             <div>
               <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">
-                Test Notification Sound
+                Reset Application Sessions
               </h3>
-              <p className="text-xs text-text-muted mt-1 leading-[1.4]">
-                Play a test chime to verify that audio output is functioning and registered with Windows Volume Mixer.
+              <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
+                Clears all logged-in sessions, cookies, local cache, and history for all embedded services.
               </p>
             </div>
             <div>
               <button
-                onClick={() => {
-                  try {
-                    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                    const osc = audioCtx.createOscillator();
-                    const gain = audioCtx.createGain();
-                    
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5 note
-                    
-                    // Simple envelope
-                    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
-                    
-                    osc.connect(gain);
-                    gain.connect(audioCtx.destination);
-                    
-                    osc.start();
-                    osc.stop(audioCtx.currentTime + 0.6);
-                    console.log('[Renderer] Audio test chime triggered successfully.');
-                  } catch (e) {
-                    console.error('[Renderer] Failed to play audio test chime:', e);
-                  }
-                }}
-                className="no-drag px-4 py-2 bg-accent/10 hover:bg-accent/20 text-accent text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer"
+                onClick={handleClearSessions}
+                disabled={clearingState !== 'idle'}
+                className={`no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none ${
+                  clearingState === 'clearing'
+                    ? 'bg-hover-surface text-text-muted cursor-not-allowed'
+                    : clearingState === 'success'
+                      ? 'bg-green-600/20 text-green-400 border border-green-500/30'
+                      : 'bg-destructive/10 hover:bg-destructive/20 text-destructive'
+                }`}
               >
-                Play Test Sound
+                {clearingState === 'clearing' && 'Clearing...'}
+                {clearingState === 'success' && 'Sessions Cleared!'}
+                {clearingState === 'idle' && 'Clear Sessions'}
               </button>
             </div>
           </div>
+          {clearingState === 'success' && (
+            <div className="text-xs text-green-400 font-normal leading-[1.4] mt-2">
+              Application caches cleared. Please close and relaunch Gradd to sign in again.
+            </div>
+          )}
         </section>
 
         {/* Section: Version & Updates */}
@@ -890,13 +1083,17 @@ function SettingsPanel(): React.JSX.Element {
             <div>
               <button
                 onClick={handleCheckUpdates}
-                disabled={checkingState !== 'idle'}
+                disabled={checkingState === 'checking' || checkingState === 'available'}
                 className={`no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer flex items-center gap-1.5 ${
-                  checkingState === 'checking'
+                  (checkingState === 'checking' || checkingState === 'available')
                     ? 'bg-hover-surface text-text-muted cursor-not-allowed border border-surface-border'
                     : checkingState === 'up-to-date'
                       ? 'bg-green-600/20 text-green-400 border border-green-500/30'
-                      : 'bg-accent text-white hover:bg-accent/80'
+                      : checkingState === 'error'
+                        ? 'bg-destructive/10 text-destructive border border-destructive/30'
+                        : checkingState === 'downloaded'
+                          ? 'bg-accent text-white hover:bg-accent/80 animate-pulse'
+                          : 'bg-accent text-white hover:bg-accent/80'
                 }`}
               >
                 {checkingState === 'checking' && (
@@ -905,12 +1102,20 @@ function SettingsPanel(): React.JSX.Element {
                     Checking for Updates...
                   </>
                 )}
+                {checkingState === 'available' && (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-text-muted border-t-transparent rounded-full animate-spin inline-block" />
+                    Downloading Update...
+                  </>
+                )}
                 {checkingState === 'up-to-date' && (
                   <>
                     <Check size={14} weight="bold" />
                     Up to date
                   </>
                 )}
+                {checkingState === 'downloaded' && 'Install & Restart'}
+                {checkingState === 'error' && 'Retry Check'}
                 {checkingState === 'idle' && 'Check for Updates'}
               </button>
             </div>
@@ -920,36 +1125,14 @@ function SettingsPanel(): React.JSX.Element {
               <Check size={12} weight="bold" /> Gradd is currently up to date (v{appVersion}).
             </div>
           )}
+          {checkingState === 'error' && (
+            <div className="text-xs text-destructive font-normal leading-[1.4] mt-2 flex items-center gap-1.5">
+              Failed to check for updates. {updateError}
+            </div>
+          )}
         </section>
 
-        {/* Section 5: Cloud Configuration Sync */}
-        <section className="bg-secondary border border-surface-border rounded-lg p-5 flex flex-col gap-4 opacity-75">
-          <div className="flex items-center gap-3">
-            <Cloud size={20} weight="bold" className="text-text-muted" />
-            <h2 className="text-sm font-semibold text-text-muted leading-[1.2]">Cloud Sync</h2>
-            <span className="text-[10px] bg-dominant text-text-muted px-1.5 py-0.5 rounded uppercase border border-surface-border">
-              Phase 6
-            </span>
-          </div>
-          <div className="flex items-center justify-between border-t border-surface-border/50 pt-4 mt-1">
-            <div>
-              <h3 className="text-xs font-semibold text-text-muted leading-[1.2]">
-                Sync Configuration with Google
-              </h3>
-              <p className="text-xs text-text-muted mt-1 leading-[1.4]">
-                Back up your active services configuration and general settings to the cloud.
-              </p>
-            </div>
-            <div>
-              <button
-                disabled
-                className="px-4 py-2 bg-dominant text-text-muted text-xs font-semibold leading-[1.4] rounded border border-surface-border/50 cursor-not-allowed"
-              >
-                Sign in with Google
-              </button>
-            </div>
-          </div>
-        </section>
+
       </div>
     </div>
   )
