@@ -55,6 +55,10 @@ const api = {
   },
   onUpdateError: (callback: (error: string) => void): void => {
     ipcRenderer.on('update-error', (_e, err) => callback(err))
+  },
+  showProfileMenu: (): Promise<void> => ipcRenderer.invoke('show-profile-menu'),
+  onProfileMenuAction: (callback: (action: 'settings' | 'logout') => void): void => {
+    ipcRenderer.on('profile-menu-action', (_e, action) => callback(action))
   }
 }
 

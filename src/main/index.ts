@@ -647,6 +647,32 @@ app.whenReady().then(() => {
     }
   })
 
+  ipcMain.handle('show-profile-menu', (event) => {
+    const menu = Menu.buildFromTemplate([
+      {
+        label: 'Settings',
+        click: () => {
+          if (mainWindow) {
+            mainWindow.webContents.send('profile-menu-action', 'settings')
+          }
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Log Out',
+        click: () => {
+          if (mainWindow) {
+            mainWindow.webContents.send('profile-menu-action', 'logout')
+          }
+        }
+      }
+    ])
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) {
+      menu.popup({ window: win })
+    }
+  })
+
   ipcMain.handle('clear-service-storage-data', async (_, id: string) => {
     try {
       const ses = session.fromPartition(`persist:service-${id}`)

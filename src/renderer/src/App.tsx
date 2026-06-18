@@ -40,7 +40,8 @@ function App(): React.JSX.Element {
     isDndActive,
     setDndActiveState,
     reorderServices,
-    authState
+    authState,
+    logoutGoogle
   } = useLayoutStore()
   const [hoveredToggle, setHoveredToggle] = useState(false)
   const [draggedServiceId, setDraggedServiceId] = useState<string | null>(null)
@@ -49,14 +50,14 @@ function App(): React.JSX.Element {
   const profileMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
-        setIsProfileMenuOpen(false)
+    window.api.onProfileMenuAction((action) => {
+      if (action === 'settings') {
+        showSettings()
+      } else if (action === 'logout') {
+        handleLogout()
       }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    })
+  }, [showSettings])
 
   const handleLogout = async () => {
     const clearSetup = window.confirm(
@@ -363,9 +364,9 @@ function App(): React.JSX.Element {
 
                 {/* Google Account Profile Picture */}
                 {authState.loggedIn && authState.photoURL && (
-                  <div className="mt-1 pt-3 pb-2 border-t border-surface-border/50 flex justify-center w-full relative" ref={profileMenuRef}>
+                  <div className="mt-1 pt-3 pb-2 border-t border-surface-border/50 flex justify-center w-full relative">
                     <button
-                      onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                      onClick={() => window.api.showProfileMenu()}
                       className="no-drag w-7 h-7 rounded-full overflow-hidden border border-surface-border cursor-pointer hover:border-accent transition-all duration-150"
                       title="Google Account"
                     >
@@ -375,24 +376,6 @@ function App(): React.JSX.Element {
                         alt="Google Profile" 
                       />
                     </button>
-
-                    {isProfileMenuOpen && (
-                      <div className="absolute left-14 bottom-0 mb-2 w-36 bg-secondary border border-surface-border rounded shadow-lg flex flex-col z-50 overflow-hidden">
-                        <button 
-                          onClick={() => { setIsProfileMenuOpen(false); showSettings(); }} 
-                          className="px-4 py-2 text-left text-xs font-semibold text-text-primary hover:bg-hover-surface transition-colors cursor-pointer"
-                        >
-                          Settings
-                        </button>
-                        <div className="w-full h-px bg-surface-border" />
-                        <button 
-                          onClick={() => { setIsProfileMenuOpen(false); handleLogout(); }} 
-                          className="px-4 py-2 text-left text-xs font-semibold text-[#e5534b] hover:bg-hover-surface transition-colors cursor-pointer"
-                        >
-                          Log Out
-                        </button>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -520,9 +503,9 @@ function App(): React.JSX.Element {
 
                 {/* Google Account Profile Picture */}
                 {authState.loggedIn && authState.photoURL && (
-                  <div className="ml-1 pl-2 border-l border-surface-border/50 flex items-center h-full relative" ref={layoutMode === 'tabs' ? profileMenuRef : null}>
+                  <div className="ml-1 pl-2 border-l border-surface-border/50 flex items-center h-full relative">
                     <button
-                      onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                      onClick={() => window.api.showProfileMenu()}
                       className="no-drag w-6 h-6 rounded-full overflow-hidden border border-surface-border cursor-pointer hover:border-accent transition-all duration-150"
                       title="Google Account"
                     >
@@ -532,24 +515,6 @@ function App(): React.JSX.Element {
                         alt="Google Profile" 
                       />
                     </button>
-
-                    {isProfileMenuOpen && layoutMode === 'tabs' && (
-                      <div className="absolute right-0 top-full mt-2 w-36 bg-secondary border border-surface-border rounded shadow-lg flex flex-col z-50 overflow-hidden">
-                        <button 
-                          onClick={() => { setIsProfileMenuOpen(false); showSettings(); }} 
-                          className="px-4 py-2 text-left text-xs font-semibold text-text-primary hover:bg-hover-surface transition-colors cursor-pointer"
-                        >
-                          Settings
-                        </button>
-                        <div className="w-full h-px bg-surface-border" />
-                        <button 
-                          onClick={() => { setIsProfileMenuOpen(false); handleLogout(); }} 
-                          className="px-4 py-2 text-left text-xs font-semibold text-[#e5534b] hover:bg-hover-surface transition-colors cursor-pointer"
-                        >
-                          Log Out
-                        </button>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>

@@ -44,6 +44,8 @@ export interface GraddAPI {
   onUpdateNotAvailable(callback: (info: any) => void): void
   onUpdateDownloaded(callback: (info: any) => void): void
   onUpdateError(callback: (error: string) => void): void
+  showProfileMenu(): Promise<void>
+  onProfileMenuAction(callback: (action: 'settings' | 'logout') => void): void
 }
 
 export interface DndConfig {
