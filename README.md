@@ -25,7 +25,18 @@
 <br />
 
 <div align="center">
-  <img src="./docs/screenshot.png" alt="Gradd UI Dashboard Mockup" width="90%" />
+  <h3>Settings Panel</h3>
+  <img src="./docs/screenshot.png" alt="Gradd Settings UI" width="90%" />
+  
+  <br /><br />
+  
+  <h3>Services Directory (Sidebar Layout)</h3>
+  <img src="./docs/screenshot2.png" alt="Gradd Services Directory (Sidebar Layout)" width="90%" />
+  
+  <br /><br />
+  
+  <h3>Services Directory (Tab Bar Layout)</h3>
+  <img src="./docs/screenshot3.png" alt="Gradd Services Directory (Tab Bar Layout)" width="90%" />
 </div>
 
 <br />
