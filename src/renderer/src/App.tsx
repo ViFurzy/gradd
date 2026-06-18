@@ -2,8 +2,6 @@ import React, { useEffect, useState, useRef } from 'react'
 import {
   ArrowsLeftRight,
   Chats,
-  InstagramLogo,
-  ChatTeardropText,
   Gear,
   Trash,
   Moon,
@@ -45,18 +43,18 @@ function App(): React.JSX.Element {
   } = useLayoutStore()
   const [hoveredToggle, setHoveredToggle] = useState(false)
   const [draggedServiceId, setDraggedServiceId] = useState<string | null>(null)
-  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
-  const profileMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    window.api.onProfileMenuAction((action) => {
-      if (action === 'settings') {
-        showSettings()
-      } else if (action === 'logout') {
-        handleLogout()
-      }
-    })
+    if (window.api.onProfileMenuAction) {
+      window.api.onProfileMenuAction((action) => {
+        if (action === 'settings') {
+          showSettings()
+        } else if (action === 'logout') {
+          handleLogout()
+        }
+      })
+    }
   }, [showSettings])
 
   const handleLogout = async () => {
@@ -710,7 +708,7 @@ function DirectoryDashboard(): React.JSX.Element {
 }
 
 function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Element {
-  const { layoutMode, setLayoutMode, dndConfig, isDndActive, updateDndConfig, authState, loginGoogle, logoutGoogle, generalConfig, updateGeneralConfig } = useLayoutStore()
+  const { dndConfig, isDndActive, updateDndConfig, authState, loginGoogle, generalConfig, updateGeneralConfig } = useLayoutStore()
   const [clearingState, setClearingState] = useState<'idle' | 'clearing' | 'success'>('idle')
   const [appVersion, setAppVersion] = useState<string>('0.0.0')
   const [checkingState, setCheckingState] = useState<'idle' | 'checking' | 'up-to-date' | 'available' | 'downloaded' | 'error'>('idle')

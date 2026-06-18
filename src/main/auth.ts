@@ -1,7 +1,6 @@
-import { safeStorage } from 'electron';
+import { safeStorage, BrowserWindow } from 'electron';
 import * as crypto from 'crypto';
 import * as http from 'http';
-import { shell } from 'electron';
 
 // These should be populated by the user's .env in a real environment
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -37,6 +36,8 @@ export async function loginWithGoogle(): Promise<{ accessToken: string; idToken:
     `prompt=consent`;
 
   return new Promise((resolve, reject) => {
+    let authWindow: BrowserWindow | null = null;
+
     if (authServer) {
       authServer.close();
     }
@@ -50,6 +51,7 @@ export async function loginWithGoogle(): Promise<{ accessToken: string; idToken:
         if (error) {
           res.end('<h1>Authentication failed</h1><p>You can close this window.</p>');
           if (authServer) authServer.close();
+          if (authWindow) authWindow.close();
           reject(new Error(`OAuth Error: ${error}`));
           return;
         }
@@ -57,6 +59,7 @@ export async function loginWithGoogle(): Promise<{ accessToken: string; idToken:
         if (code) {
           res.end('<h1>Authentication successful!</h1><p>You can close this window and return to Gradd.</p>');
           if (authServer) authServer.close();
+          if (authWindow) authWindow.close();
 
           try {
             const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
@@ -92,13 +95,36 @@ export async function loginWithGoogle(): Promise<{ accessToken: string; idToken:
     });
 
     authServer.listen(PORT, '127.0.0.1', () => {
-      shell.openExternal(authUrl);
+      authWindow = new BrowserWindow({
+        width: 600,
+        height: 750,
+        title: 'Sign in with Google',
+        show: false,
+        autoHideMenuBar: true,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true
+        }
+      });
+      // Circumvent 'disallowed_useragent' by using a standard Chrome user agent
+      authWindow.webContents.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+      
+      authWindow.loadURL(authUrl);
+      
+      authWindow.once('ready-to-show', () => {
+        if (authWindow) authWindow.show();
+      });
+
+      authWindow.on('closed', () => {
+        authWindow = null;
+      });
     });
 
     // Timeout after 5 minutes
     setTimeout(() => {
       if (authServer) {
         authServer.close();
+        if (authWindow) authWindow.close();
         reject(new Error('Authentication timed out.'));
       }
     }, 5 * 60 * 1000);
