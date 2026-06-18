@@ -16,8 +16,8 @@
 
 ### Layout
 
-- [ ] **LAYT-01**: User can choose between two layout modes: left sidebar icon bar or top horizontal service tabs
-- [ ] **LAYT-02**: Selected layout mode persists across app restarts
+- [x] **LAYT-01**: User can choose between two layout modes: left sidebar icon bar or top horizontal service tabs
+- [x] **LAYT-02**: Selected layout mode persists across app restarts
 
 ### Notifications
 
@@ -38,8 +38,8 @@
 
 ### Windows System Integration
 
-- [ ] **SYS-01**: Closing the main window minimizes the app to the system tray instead of quitting
-- [ ] **SYS-02**: System tray icon shows a right-click context menu with: DND toggle, Show/Hide window, Quit
+- [x] **SYS-01**: Closing the main window minimizes the app to the system tray instead of quitting
+- [x] **SYS-02**: System tray icon shows a right-click context menu with: DND toggle, Show/Hide window, Quit
 - [ ] **SYS-03**: App checks for updates on launch and displays a non-intrusive banner when an update is available; user triggers manual download and install
 
 ## v2 Requirements
@@ -89,8 +89,8 @@
 | SVC-04 | Phase 2 | Pending |
 | SVC-05 | Phase 5 | Pending |
 | SVC-06 | Phase 5 | Pending |
-| LAYT-01 | Phase 1 | Pending |
-| LAYT-02 | Phase 1 | Pending |
+| LAYT-01 | Phase 1 | Complete |
+| LAYT-02 | Phase 1 | Complete |
 | NOTF-01 | Phase 3 | Pending |
 | NOTF-02 | Phase 3 | Pending |
 | DND-01 | Phase 4 | Pending |
@@ -99,11 +99,12 @@
 | AUTH-01 | Phase 6 | Pending |
 | AUTH-02 | Phase 6 | Pending |
 | AUTH-03 | Phase 6 | Pending |
-| SYS-01 | Phase 1 | Pending |
-| SYS-02 | Phase 1 | Pending |
+| SYS-01 | Phase 1 | Complete |
+| SYS-02 | Phase 1 | Complete |
 | SYS-03 | Phase 7 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 19 total
 - Mapped to phases: 19
 - Unmapped: 0 ✓
