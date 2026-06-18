@@ -404,7 +404,7 @@ function App(): React.JSX.Element {
               className="flex-1 h-full bg-transparent flex flex-col items-center justify-start overflow-hidden content-area"
             >
               {activePanel === 'directory' ? <DirectoryDashboard /> : null}
-              {activePanel === 'settings' ? <SettingsPanel /> : null}
+              {activePanel === 'settings' ? <SettingsPanel onLogout={handleLogout} /> : null}
             </main>
           </>
         ) : (
@@ -561,7 +561,7 @@ function App(): React.JSX.Element {
               className="flex-1 h-full bg-transparent flex flex-col items-center justify-start overflow-hidden content-area"
             >
               {activePanel === 'directory' ? <DirectoryDashboard /> : null}
-              {activePanel === 'settings' ? <SettingsPanel /> : null}
+              {activePanel === 'settings' ? <SettingsPanel onLogout={handleLogout} /> : null}
             </main>
           </div>
         )}
@@ -744,7 +744,7 @@ function DirectoryDashboard(): React.JSX.Element {
   )
 }
 
-function SettingsPanel(): React.JSX.Element {
+function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Element {
   const { layoutMode, setLayoutMode, dndConfig, isDndActive, updateDndConfig, authState, loginGoogle, logoutGoogle, generalConfig, updateGeneralConfig } = useLayoutStore()
   const [clearingState, setClearingState] = useState<'idle' | 'clearing' | 'success'>('idle')
   const [appVersion, setAppVersion] = useState<string>('0.0.0')
@@ -863,7 +863,7 @@ function SettingsPanel(): React.JSX.Element {
             <div>
               {authState.loggedIn ? (
                 <button
-                  onClick={() => handleLogout()}
+                  onClick={() => onLogout()}
                   className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none bg-dominant hover:bg-hover-surface text-text-primary border border-surface-border"
                 >
                   Sign Out
