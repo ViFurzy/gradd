@@ -1,4 +1,6 @@
 <div align="center">
+  <img src="./docs/logo.png" alt="Gradd Logo" width="120" />
+  <br />
   <img src="./docs/banner.png" alt="Gradd Banner" width="100%" />
 
   <br />
@@ -28,14 +30,6 @@
 
 <br />
 
-## 🚀 Tech Stack
-
-- **Framework**: [Electron](https://electronjs.org/) + [React](https://reactjs.org/)
-- **Bundler**: [Vite](https://vitejs.dev/) with `electron-vite`
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/) + Phosphor Icons
-- **State Management**: [Zustand](https://github.com/pmndrs/zustand)
-- **Backend / Sync**: Firebase Auth & Firestore
-
 ## 🛠️ Getting Started
 
 ### Installation
@@ -43,39 +37,6 @@
 1. Go to the [Releases](https://github.com/ViFurzy/gradd/releases) page.
 2. Download the latest installer (`gradd-app-1.0.0-setup.exe`) or the Portable version.
 3. Run the installer and you're good to go!
-
-### Development Setup
-
-Clone the repository and install dependencies:
-
-```bash
-git clone https://github.com/ViFurzy/gradd.git
-cd gradd
-npm install
-```
-
-Create a `.env` file in the root directory to enable Firebase Cloud Sync:
-
-```env
-VITE_FIREBASE_API_KEY=your_api_key
-VITE_FIREBASE_AUTH_DOMAIN=your_auth_domain
-VITE_FIREBASE_PROJECT_ID=your_project_id
-VITE_FIREBASE_STORAGE_BUCKET=your_storage_bucket
-VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
-VITE_FIREBASE_APP_ID=your_app_id
-```
-
-Run the development server:
-
-```bash
-npm run dev
-```
-
-Build the production app for Windows:
-
-```bash
-npm run build:win
-```
 
 ## 🔒 Privacy & Security
 
