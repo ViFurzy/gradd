@@ -1,4 +1,4 @@
-import { safeStorage, shell } from 'electron';
+import { safeStorage, shell, net } from 'electron';
 import * as crypto from 'crypto';
 import * as http from 'http';
 
@@ -50,19 +50,13 @@ export async function loginWithGoogle(): Promise<{ accessToken: string; idToken:
 </body></html>`
 : `<!doctype html>
 <html><head><meta charset="utf-8"><title>Gradd</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0f0f0f;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh}@keyframes spin{to{transform:rotate(360deg)}}.ring{width:3rem;height:3rem;border:3px solid #333;border-top-color:#6366f1;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 1.5rem}</style>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0f0f0f;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh}</style>
 </head><body>
 <div style="text-align:center;padding:2rem">
   <div style="font-size:3rem;margin-bottom:1rem">✓</div>
   <h1 style="font-size:1.25rem;font-weight:600;margin-bottom:.5rem">Signed in successfully!</h1>
-  <p style="color:#888;font-size:.875rem">Return to Gradd — this tab will close automatically.</p>
-  <p id="countdown" style="color:#555;font-size:.75rem;margin-top:.75rem">Closing in 5…</p>
+  <p style="color:#888;font-size:.875rem">You can now close this tab and return to Gradd.</p>
 </div>
-<script>
-  let n=5;
-  const el=document.getElementById('countdown');
-  const t=setInterval(()=>{n--;el&&(el.textContent='Closing in '+n+'…');if(n<=0){clearInterval(t);window.close();}},1000);
-</script>
 </body></html>`);
 
       if (authServer) { authServer.close(); authServer = null; }
@@ -71,9 +65,9 @@ export async function loginWithGoogle(): Promise<{ accessToken: string; idToken:
       if (!code) { reject(new Error('No authorization code received.')); return; }
 
       try {
-        // PKCE token exchange — no client_secret; the code_verifier proves possession of
-        // the original code_challenge without needing a bundled secret.
-        const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+        // Use net.fetch (Chromium's networking stack) instead of Node's global fetch —
+        // more reliable in production Electron apps and respects system proxy settings.
+        const tokenResponse = await net.fetch('https://oauth2.googleapis.com/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
@@ -82,7 +76,7 @@ export async function loginWithGoogle(): Promise<{ accessToken: string; idToken:
             redirect_uri: redirectUri,
             grant_type: 'authorization_code',
             code_verifier: verifier
-          })
+          }).toString()
         });
 
         const tokens = await tokenResponse.json();
@@ -146,14 +140,14 @@ export async function refreshGoogleToken(refreshToken: string): Promise<{ access
   }
 
   // No client_secret — public PKCE client refresh flow.
-  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+  const tokenResponse = await net.fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       client_id: CLIENT_ID,
       refresh_token: refreshToken,
       grant_type: 'refresh_token'
-    })
+    }).toString()
   });
 
   const tokens = await tokenResponse.json();
@@ -168,7 +162,7 @@ export async function refreshGoogleToken(refreshToken: string): Promise<{ access
 }
 
 export async function getGoogleUserInfo(accessToken: string): Promise<{ uid: string; name: string; email: string; photoURL: string }> {
-  const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+  const response = await net.fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
     headers: { Authorization: `Bearer ${accessToken}` }
   });
   if (!response.ok) throw new Error(`Failed to fetch user info: ${response.status}`);

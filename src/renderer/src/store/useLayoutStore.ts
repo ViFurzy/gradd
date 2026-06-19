@@ -161,7 +161,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     if (result.success) {
       set({ authState: { loggedIn: true, uid: result.uid, photoURL: result.photoURL } })
     } else {
-      console.error(result.error)
+      throw new Error(result.error || 'Login failed')
     }
   },
   logoutGoogle: async () => {

@@ -717,6 +717,8 @@ function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Elemen
   const [appVersion, setAppVersion] = useState<string>('0.0.0')
   const [checkingState, setCheckingState] = useState<'idle' | 'checking' | 'up-to-date' | 'available' | 'downloaded' | 'error'>('idle')
   const [updateError, setUpdateError] = useState<string>('')
+  const [loginState, setLoginState] = useState<'idle' | 'waiting' | 'error'>('idle')
+  const [loginError, setLoginError] = useState<string>('')
 
   useEffect(() => {
     window.api.getAppVersion()
@@ -836,12 +838,28 @@ function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Elemen
                   Sign Out
                 </button>
               ) : (
-                <button
-                  onClick={() => loginGoogle()}
-                  className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30"
-                >
-                  Sign in with Google
-                </button>
+                <div className="flex flex-col items-end gap-1.5">
+                  <button
+                    onClick={async () => {
+                      setLoginState('waiting')
+                      setLoginError('')
+                      try {
+                        await loginGoogle()
+                        setLoginState('idle')
+                      } catch (err: any) {
+                        setLoginState('error')
+                        setLoginError(err.message || 'Login failed')
+                      }
+                    }}
+                    disabled={loginState === 'waiting'}
+                    className={`no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none border ${loginState === 'error' ? 'bg-destructive/10 text-destructive border-destructive/30' : 'bg-accent/10 hover:bg-accent/20 text-accent border-accent/30'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    {loginState === 'waiting' ? 'Waiting for browser…' : 'Sign in with Google'}
+                  </button>
+                  {loginState === 'error' && (
+                    <p className="text-xs text-destructive leading-[1.4] max-w-[240px] text-right">{loginError}</p>
+                  )}
+                </div>
               )}
             </div>
           </div>
