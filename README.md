@@ -1,10 +1,7 @@
 <div align="center">
-  <img src="./docs/screenshot.png" alt="Gradd App" width="90%" />
+  <img src="./docs/repo_header.png" alt="Gradd" width="100%" />
   <br /><br />
-
-  <h1>Gradd</h1>
   <p><strong>All your messaging apps in one place — the app Rambox should have been.</strong></p>
-
   <p>
     <img src="https://img.shields.io/badge/platform-Windows-blue?style=flat-square&logo=windows" alt="Platform" />
     <img src="https://img.shields.io/badge/electron-39.x-47848F?style=flat-square&logo=electron" alt="Electron" />
@@ -17,6 +14,13 @@
 ---
 
 Gradd is a Windows desktop application that aggregates multiple messaging platforms — Messenger, WhatsApp, Telegram, Slack, Instagram, and Gadu-Gadu — into a single polished interface. Each service runs in its own fully isolated Chromium session, so logins never bleed between tabs and notifications fire independently per service.
+
+## Screenshots
+
+<div align="center">
+  <img src="./docs/screenshot-services.png" alt="Services Directory" width="80%" />
+  <br /><br />
+</div>
 
 ## Features
 
@@ -67,13 +71,7 @@ npm run dev
 
 This starts the Vite dev server for the renderer with HMR and launches Electron with hot-reload for the main process.
 
-> **Important:** Any new `ipcRenderer.invoke` calls added to `src/preload/index.ts` require a full restart of the dev server (`Ctrl+C` then `npm run dev`) to take effect. React will throw `is not a function` errors if you only save-refresh the renderer.
-
-### Type-check
-
-```bash
-npm run typecheck
-```
+> **Important:** Any new `ipcRenderer.invoke` calls added to `src/preload/index.ts` require a full restart of the dev server (`Ctrl+C` then `npm run dev`) to take effect.
 
 ### Build for Windows
 
@@ -82,13 +80,6 @@ npm run build:win
 ```
 
 Outputs an NSIS installer and portable exe to `dist/`.
-
-### Other platforms
-
-```bash
-npm run build:mac    # macOS DMG
-npm run build:linux  # AppImage / deb / snap
-```
 
 ## Architecture
 
@@ -140,7 +131,7 @@ The schema covers: `layout`, `services`, `dnd`, `auth` (encrypted refresh token)
 
 ### Required: Firestore Security Rules
 
-The Firebase API key ships inside the app bundle (this is standard for client-side Firebase — security is enforced by rules, not key secrecy). You **must** configure Firestore rules to restrict access to authenticated users only. Without this, anyone who extracts the API key from the asar can read or overwrite every user's synced configuration.
+The Firebase API key ships inside the app bundle (this is standard for client-side Firebase — security is enforced by rules, not key secrecy). You **must** configure Firestore rules to restrict access to authenticated users only.
 
 Go to [Firebase Console](https://console.firebase.google.com/) → Firestore Database → Rules and set:
 
@@ -154,8 +145,6 @@ service cloud.firestore {
   }
 }
 ```
-
-This ensures each user can only read and write their own document. No unauthenticated access is possible.
 
 ## Tech Stack
 
@@ -183,4 +172,4 @@ Pull requests are welcome. For major changes, open an issue first to discuss the
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) — made by [ViFurzy](https://vi-design.pro)
