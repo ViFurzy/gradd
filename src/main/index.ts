@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from 'fs'
 import { optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { store, DndConfig, defaultServices } from './store.js'
-import { loginWithGoogle, refreshGoogleToken, encryptToken, decryptToken } from './auth.js'
+import { loginWithGoogle, refreshGoogleToken, encryptToken, decryptToken, getGoogleUserInfo } from './auth.js'
 import { loginToFirebase, logoutFromFirebase, syncConfigToCloud, fetchConfigFromCloud, onCloudConfigChanged } from './firebase.js'
 import pkg from 'electron-updater'
 const { autoUpdater } = pkg
@@ -903,26 +903,46 @@ app.whenReady().then(() => {
   ipcMain.handle('login-google', async () => {
     try {
       const tokens = await loginWithGoogle();
-      const { uid, photoURL } = await loginToFirebase(tokens.idToken);
+
+      // Always get user info from Google — this is the source of truth for uid/photoURL
+      // and works regardless of Firebase client_id configuration.
+      const userInfo = await getGoogleUserInfo(tokens.accessToken);
       const encryptedRefresh = encryptToken(tokens.refreshToken);
-      
-      store.set('auth', { uid, photoURL: photoURL || undefined, refreshToken: encryptedRefresh });
-      
-      // Fetch cloud config
-      const cloudConfig = await fetchConfigFromCloud(uid);
-      if (cloudConfig) {
-        if (cloudConfig.services) store.set('services', cloudConfig.services);
-        if (cloudConfig.dnd) store.set('dnd', cloudConfig.dnd);
-        if (cloudConfig.layout) store.set('layout', cloudConfig.layout);
-        if (mainWindow) {
-          mainWindow.webContents.send('services-updated', store.get('services'));
-        }
-      } else {
-        await pushConfigToCloud();
+
+      let uid = userInfo.uid;
+      let photoURL: string | undefined = userInfo.photoURL || undefined;
+
+      // Attempt Firebase auth for cloud sync — optional, degrades gracefully.
+      // Fails when the Desktop app OAuth client_id isn't in Firebase's authorized list;
+      // user is still logged in locally and cloud sync is skipped.
+      let firebaseOk = false;
+      try {
+        const firebaseResult = await loginToFirebase(tokens.idToken);
+        uid = firebaseResult.uid; // Firebase uid matches Google sub
+        photoURL = firebaseResult.photoURL || photoURL;
+        firebaseOk = true;
+      } catch (fbErr: any) {
+        console.warn('[Auth] Firebase login failed — cloud sync unavailable:', fbErr.message);
       }
 
-      setupCloudSyncListener(uid);
-      return { success: true, uid };
+      store.set('auth', { uid, photoURL, refreshToken: encryptedRefresh });
+
+      if (firebaseOk) {
+        const cloudConfig = await fetchConfigFromCloud(uid);
+        if (cloudConfig) {
+          if (cloudConfig.services) store.set('services', cloudConfig.services);
+          if (cloudConfig.dnd) store.set('dnd', cloudConfig.dnd);
+          if (cloudConfig.layout) store.set('layout', cloudConfig.layout);
+          if (mainWindow) {
+            mainWindow.webContents.send('services-updated', store.get('services'));
+          }
+        } else {
+          await pushConfigToCloud();
+        }
+        setupCloudSyncListener(uid);
+      }
+
+      return { success: true, uid, photoURL };
     } catch (err: any) {
       console.error('Google login failed:', err);
       return { success: false, error: err.message };

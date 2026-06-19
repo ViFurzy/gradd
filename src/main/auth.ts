@@ -37,17 +37,33 @@ export async function loginWithGoogle(): Promise<{ accessToken: string; idToken:
       const code = url.searchParams.get('code');
       const error = url.searchParams.get('error');
 
-      // Friendly page shown in the browser after redirect
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(
-        error
-          ? `<!doctype html><html><body style="font-family:system-ui;padding:2rem">
-              <h2>Authentication failed</h2><p>You can close this tab and return to Gradd.</p>
-             </body></html>`
-          : `<!doctype html><html><body style="font-family:system-ui;padding:2rem">
-              <h2>Signed in successfully!</h2><p>You can close this tab and return to Gradd.</p>
-             </body></html>`
-      );
+      res.end(error ? `<!doctype html>
+<html><head><meta charset="utf-8"><title>Gradd</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0f0f0f;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh}</style>
+</head><body>
+<div style="text-align:center;padding:2rem">
+  <div style="font-size:3rem;margin-bottom:1rem">✗</div>
+  <h1 style="font-size:1.25rem;font-weight:600;margin-bottom:.5rem">Authentication failed</h1>
+  <p style="color:#888;font-size:.875rem">You can close this tab and return to Gradd.</p>
+</div>
+</body></html>`
+: `<!doctype html>
+<html><head><meta charset="utf-8"><title>Gradd</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0f0f0f;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh}@keyframes spin{to{transform:rotate(360deg)}}.ring{width:3rem;height:3rem;border:3px solid #333;border-top-color:#6366f1;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 1.5rem}</style>
+</head><body>
+<div style="text-align:center;padding:2rem">
+  <div style="font-size:3rem;margin-bottom:1rem">✓</div>
+  <h1 style="font-size:1.25rem;font-weight:600;margin-bottom:.5rem">Signed in successfully!</h1>
+  <p style="color:#888;font-size:.875rem">Return to Gradd — this tab will close automatically.</p>
+  <p id="countdown" style="color:#555;font-size:.75rem;margin-top:.75rem">Closing in 5…</p>
+</div>
+<script>
+  let n=5;
+  const el=document.getElementById('countdown');
+  const t=setInterval(()=>{n--;el&&(el.textContent='Closing in '+n+'…');if(n<=0){clearInterval(t);window.close();}},1000);
+</script>
+</body></html>`);
 
       if (authServer) { authServer.close(); authServer = null; }
 
@@ -149,6 +165,15 @@ export async function refreshGoogleToken(refreshToken: string): Promise<{ access
     accessToken: tokens.access_token,
     idToken: tokens.id_token
   };
+}
+
+export async function getGoogleUserInfo(accessToken: string): Promise<{ uid: string; name: string; email: string; photoURL: string }> {
+  const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!response.ok) throw new Error(`Failed to fetch user info: ${response.status}`);
+  const info = await response.json();
+  return { uid: info.sub, name: info.name, email: info.email, photoURL: info.picture || '' };
 }
 
 export function encryptToken(token: string): string {
