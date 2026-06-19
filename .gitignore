@@ -1,7 +1,40 @@
+# Dependencies
 node_modules
+
+# Build outputs
 dist
 out
-.DS_Store
-.eslintcache
-*.log*
+
+# Environment — contains secrets, never commit
 .env
+.env.*
+
+# Logs
+*.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode
+.editorconfig
+*.swp
+*.swo
+
+# AI / planning tools
+.planning
+.claude
+CLAUDE.md
+HANDOVER.md
+
+# Cache
+.eslintcache
+*.tsbuildinfo
+
+# Test output
+test-results
+playwright-report
+
+# Dev update config (only needed at runtime in dev)
+dev-app-update.yml
