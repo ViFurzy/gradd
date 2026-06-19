@@ -1,14 +1,15 @@
-import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, WebContentsView, session, Notification, dialog } from 'electron'
+import electron from 'electron'
+import type { BrowserWindow as BrowserWindowType, Tray as TrayType, WebContentsView as WebContentsViewType } from 'electron'
+const { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, WebContentsView, session, Notification, dialog } = electron
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { readFileSync, writeFileSync } from 'fs'
-import { optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { store, DndConfig, defaultServices } from './store.js'
+import { store, initStore, DndConfig, defaultServices } from './store.js'
 import { loginWithGoogle, refreshGoogleToken, encryptToken, decryptToken, getGoogleUserInfo } from './auth.js'
 import { loginToFirebase, logoutFromFirebase, syncConfigToCloud, fetchConfigFromCloud, onCloudConfigChanged } from './firebase.js'
 import pkg from 'electron-updater'
-const { autoUpdater } = pkg
+let isDev = false // set in app.whenReady
 
 let unsubscribeCloudSync: (() => void) | null = null;
 
@@ -35,19 +36,30 @@ function debouncedPushConfigToCloud() {
 app.setName('Gradd')
 app.setAppUserModelId('com.gradd.app')
 
+// Prevent multiple instances — if a second instance launches, focus the existing window.
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) app.quit()
+
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  }
+})
+
 // Disable Chrome's autoplay user gesture requirement to allow web page notification sounds
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-let mainWindow: BrowserWindow | null = null
-let tray: Tray | null = null
+let mainWindow: BrowserWindowType | null = null
+let tray: TrayType | null = null
 let isQuitting = false
 let saveTimeout: NodeJS.Timeout | null = null
 let cloudSyncTimeout: NodeJS.Timeout | null = null
 
-const serviceViews = new Map<string, WebContentsView>()
+const serviceViews = new Map<string, WebContentsViewType>()
 // Tracks when each service was last viewed (ms). Used to throttle inactive renderers.
 const serviceLastActive = new Map<string, number>()
 const serviceUnreads = new Map<string, number>()
@@ -174,7 +186,7 @@ function handleUnreadCountChange(serviceId: string, count: number): void {
   }
 }
 
-async function scrapeUnreadCount(view: WebContentsView, type: string): Promise<number> {
+async function scrapeUnreadCount(view: WebContentsViewType, type: string): Promise<number> {
   try {
     if (view.webContents.isDestroyed()) return 0
 
@@ -259,7 +271,7 @@ async function runPeriodicUnreadScrape(): Promise<void> {
   await Promise.allSettled(tasks)
 }
 
-function getOrCreateView(serviceId: string): WebContentsView | null {
+function getOrCreateView(serviceId: string): WebContentsViewType | null {
   if (serviceViews.has(serviceId)) {
     return serviceViews.get(serviceId)!
   }
@@ -379,6 +391,39 @@ function getOrCreateView(serviceId: string): WebContentsView | null {
     saveLastVisitedUrl(serviceId, url)
   })
 
+  // Telegram: fix scroll-up after sending a message.
+  // When the input field clears and shrinks on send, the layout reflows and the scroll
+  // position drifts upward. A MutationObserver re-anchors to the bottom whenever a new
+  // message node is added and the user was already near the bottom.
+  if (service.type === 'telegram') {
+    view.webContents.on('did-finish-load', () => {
+      view.webContents.executeJavaScript(`
+        (function() {
+          if (window.__graddScrollFix) return;
+          window.__graddScrollFix = true;
+          history.scrollRestoration = 'manual';
+
+          function init() {
+            const container =
+              document.querySelector('.bubbles') ||
+              document.querySelector('.messages-container');
+            if (!container) { setTimeout(init, 2000); return; }
+
+            const observer = new MutationObserver(() => {
+              const gap = container.scrollHeight - container.scrollTop - container.clientHeight;
+              if (gap < 200) {
+                requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+              }
+            });
+            observer.observe(container, { childList: true, subtree: true });
+          }
+
+          setTimeout(init, 1500);
+        })();
+      `).catch(() => {});
+    });
+  }
+
   // Apply initial mute state based on DND or per-service settings
   const isMuted = dndActive || !!service.muted
   console.log(`[Main] getOrCreateView: Service ${serviceId} setAudioMuted(${isMuted}). dndActive=${dndActive}, service.muted=${service.muted}`)
@@ -497,7 +542,7 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
-    if (is.dev) {
+    if (isDev) {
       mainWindow?.webContents.openDevTools()
     }
   })
@@ -508,7 +553,7 @@ function createWindow(): void {
   })
 
   // Load appropriate content depending on environment
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+  if (isDev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
@@ -618,10 +663,18 @@ function validateImportedConfig(data: unknown): { valid: boolean; reason?: strin
 }
 
 app.whenReady().then(() => {
-  // Watch window shortcuts (F12, etc.) in dev mode
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
-  })
+  isDev = !app.isPackaged
+  initStore(app.getPath('userData'))
+  const { autoUpdater } = pkg
+
+  // Open/close DevTools with F12 in dev mode
+  if (isDev) {
+    app.on('browser-window-created', (_, window) => {
+      window.webContents.on('before-input-event', (_, input) => {
+        if (input.key === 'F12') window.webContents.toggleDevTools()
+      })
+    })
+  }
 
   // Register IPC Handlers for persistence
   ipcMain.handle('get-layout-mode', () => {
@@ -1008,7 +1061,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('check-for-updates', async () => {
-    if (!is.dev) {
+    if (!isDev) {
       try {
         await autoUpdater.checkForUpdates();
       } catch (err) {
@@ -1171,7 +1224,7 @@ app.whenReady().then(() => {
   evaluateDndState()
 
   // Silently check for updates 30 seconds after launch (production only)
-  if (!is.dev) {
+  if (!isDev) {
     setTimeout(() => {
       autoUpdater.checkForUpdates().catch((err) => {
         console.error('[Updater] Background check failed:', err)

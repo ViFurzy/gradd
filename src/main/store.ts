@@ -93,77 +93,83 @@ export const defaultServices: ServiceConfig[] = [
   }
 ]
 
-export const store = new Store<AppConfig>({
-  name: 'config',
-  defaults: {
-    layout: {
-      mode: 'sidebar'
-    },
-    window: {
-      bounds: {
-        width: 1200,
-        height: 800,
-        maximized: false
+// Initialized by initStore() inside app.whenReady() — do not access before that
+export let store: Store<AppConfig>
+
+export function initStore(userDataPath: string): void {
+  store = new Store<AppConfig>({
+    name: 'config',
+    cwd: userDataPath,
+    defaults: {
+      layout: {
+        mode: 'sidebar'
+      },
+      window: {
+        bounds: {
+          width: 1200,
+          height: 800,
+          maximized: false
+        }
+      },
+      services: defaultServices,
+      dnd: {
+        manualActive: false,
+        scheduleEnabled: false,
+        startTime: '22:00',
+        endTime: '08:00'
+      },
+      general: {
+        closeToTray: true
       }
-    },
-    services: defaultServices,
-    dnd: {
-      manualActive: false,
-      scheduleEnabled: false,
-      startTime: '22:00',
-      endTime: '08:00'
-    },
-    general: {
-      closeToTray: true
     }
-  }
-})
-
-// Migration to fix 'Instagram Direct' naming
-const existingServices = store.get('services')
-if (existingServices && Array.isArray(existingServices)) {
-  let changed = false
-  const migratedServices = existingServices.map((s) => {
-    if (s.name === 'Instagram Direct') {
-      changed = true
-      return { ...s, name: 'Instagram' }
-    }
-    return s
   })
-  if (changed) {
-    store.set('services', migratedServices)
-  }
-}
 
-// Ensure any new default services are merged into the existing configuration
-try {
-  const currentServices = store.get('services') || []
-  let hasChanges = false
-  
-  for (const defService of defaultServices) {
-    if (!currentServices.some((s) => s.id === defService.id)) {
-      currentServices.push(defService)
-      hasChanges = true
+  // Migration: fix 'Instagram Direct' naming
+  const existingServices = store.get('services')
+  if (existingServices && Array.isArray(existingServices)) {
+    let changed = false
+    const migratedServices = existingServices.map((s) => {
+      if (s.name === 'Instagram Direct') {
+        changed = true
+        return { ...s, name: 'Instagram' }
+      }
+      return s
+    })
+    if (changed) {
+      store.set('services', migratedServices)
     }
   }
 
-  if (hasChanges) {
-    store.set('services', currentServices)
-  }
-} catch (error) {
-  console.error('Failed to merge default services:', error)
-}
+  // Merge any new default services into existing configuration
+  try {
+    const currentServices = store.get('services') || []
+    let hasChanges = false
 
-// Ensure DND configuration exists in the store
-try {
-  if (!store.has('dnd')) {
-    store.set('dnd', {
-      manualActive: false,
-      scheduleEnabled: false,
-      startTime: '22:00',
-      endTime: '08:00'
-    })
+    for (const defService of defaultServices) {
+      if (!currentServices.some((s) => s.id === defService.id)) {
+        currentServices.push(defService)
+        hasChanges = true
+      }
+    }
+
+    if (hasChanges) {
+      store.set('services', currentServices)
+    }
+  } catch (error) {
+    console.error('Failed to merge default services:', error)
   }
-} catch (error) {
-  console.error('Failed to initialize DND store key:', error)
+
+  // Ensure DND configuration exists
+  try {
+    if (!store.has('dnd')) {
+      store.set('dnd', {
+        manualActive: false,
+        scheduleEnabled: false,
+        startTime: '22:00',
+        endTime: '08:00'
+      })
+    }
+  } catch (error) {
+    console.error('Failed to initialize DND store key:', error)
+  }
 }
