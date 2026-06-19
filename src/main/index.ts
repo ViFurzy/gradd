@@ -1,6 +1,7 @@
-import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, WebContentsView, session, Notification } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, WebContentsView, session, Notification, dialog } from 'electron'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { readFileSync, writeFileSync } from 'fs'
 import { optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { store, DndConfig, defaultServices } from './store.js'
@@ -11,7 +12,7 @@ const { autoUpdater } = pkg
 
 let unsubscribeCloudSync: (() => void) | null = null;
 
-// Helper to push current config to cloud
+// Helper to push current config to cloud (debounced — coalesces rapid config changes)
 async function pushConfigToCloud() {
   const authState = store.get('auth');
   if (authState?.uid) {
@@ -22,6 +23,11 @@ async function pushConfigToCloud() {
     };
     await syncConfigToCloud(authState.uid, config);
   }
+}
+
+function debouncedPushConfigToCloud() {
+  if (cloudSyncTimeout) clearTimeout(cloudSyncTimeout);
+  cloudSyncTimeout = setTimeout(() => pushConfigToCloud(), 2000);
 }
 
 
@@ -39,8 +45,11 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
 let saveTimeout: NodeJS.Timeout | null = null
+let cloudSyncTimeout: NodeJS.Timeout | null = null
 
 const serviceViews = new Map<string, WebContentsView>()
+// Tracks when each service was last viewed (ms). Used to throttle inactive renderers.
+const serviceLastActive = new Map<string, number>()
 const serviceUnreads = new Map<string, number>()
 let activeServiceId: string | null = null
 let contentBounds = { x: 0, y: 0, width: 0, height: 0 }
@@ -225,15 +234,29 @@ async function scrapeUnreadCount(view: WebContentsView, type: string): Promise<n
 }
 
 async function runPeriodicUnreadScrape(): Promise<void> {
+  // Skip scraping when the app window is minimised or hidden — saves CPU + IPC round-trips
+  if (!mainWindow || !mainWindow.isVisible()) return
+
   const services = store.get('services') || []
+  const tasks: Promise<void>[] = []
+
   for (const service of services) {
     if (!service.enabled) continue
     const view = serviceViews.get(service.id)
-    if (view) {
-      const count = await scrapeUnreadCount(view, service.type)
-      handleUnreadCountChange(service.id, count)
-    }
+    if (!view) continue
+
+    // Active service already receives real-time counts via page-title-updated
+    if (service.id === activeServiceId) continue
+
+    tasks.push(
+      scrapeUnreadCount(view, service.type).then((count) => {
+        handleUnreadCountChange(service.id, count)
+      })
+    )
   }
+
+  // Run all scrapes in parallel; ignore individual failures
+  await Promise.allSettled(tasks)
 }
 
 function getOrCreateView(serviceId: string): WebContentsView | null {
@@ -248,7 +271,7 @@ function getOrCreateView(serviceId: string): WebContentsView | null {
   const view = new WebContentsView({
     webPreferences: {
       partition: `persist:service-${service.id}`,
-      sandbox: false,
+      sandbox: true,
       backgroundThrottling: false
     }
   })
@@ -363,6 +386,7 @@ function getOrCreateView(serviceId: string): WebContentsView | null {
 
   view.webContents.loadURL(service.url)
   serviceViews.set(serviceId, view)
+  serviceLastActive.set(serviceId, Date.now())
   return view
 }
 
@@ -459,8 +483,9 @@ function createWindow(): void {
     }
   })
 
-  // Pipe renderer console messages to main process stdout
-  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+  // Pipe renderer console messages to main process stdout (new single-object event API)
+  mainWindow.webContents.on('console-message', (event) => {
+    const { level, message, line, sourceId } = event as any
     const levels = ['DEBUG', 'INFO', 'WARN', 'ERROR']
     console.log(`[Renderer ${levels[level] || 'LOG'}] ${message} (at ${sourceId}:${line})`)
   })
@@ -529,6 +554,69 @@ function createTray(): void {
   updateTrayMenu()
 }
 
+const ALLOWED_SERVICE_TYPES = ['messenger', 'whatsapp', 'telegram', 'slack', 'instagram', 'gadugadu']
+
+function validateImportedConfig(data: unknown): { valid: boolean; reason?: string } {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return { valid: false, reason: 'Root value must be an object.' }
+  }
+  const obj = data as Record<string, unknown>
+
+  if (obj.services !== undefined) {
+    if (!Array.isArray(obj.services)) return { valid: false, reason: '"services" must be an array.' }
+    for (const svc of obj.services) {
+      if (!svc || typeof svc !== 'object') return { valid: false, reason: 'Each service must be an object.' }
+      const s = svc as Record<string, unknown>
+      if (typeof s.id !== 'string' || !s.id) return { valid: false, reason: 'Service "id" must be a non-empty string.' }
+      if (typeof s.name !== 'string' || !s.name) return { valid: false, reason: 'Service "name" must be a non-empty string.' }
+      if (typeof s.enabled !== 'boolean') return { valid: false, reason: 'Service "enabled" must be a boolean.' }
+      if (!ALLOWED_SERVICE_TYPES.includes(s.type as string)) {
+        return { valid: false, reason: `Service type "${s.type}" is not recognised.` }
+      }
+      if (typeof s.url !== 'string') return { valid: false, reason: 'Service "url" must be a string.' }
+      try {
+        const parsed = new URL(s.url as string)
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          return { valid: false, reason: `Service URL "${s.url}" must use http or https.` }
+        }
+      } catch {
+        return { valid: false, reason: `Service URL "${s.url}" is not a valid URL.` }
+      }
+    }
+  }
+
+  if (obj.dnd !== undefined) {
+    if (typeof obj.dnd !== 'object' || Array.isArray(obj.dnd)) return { valid: false, reason: '"dnd" must be an object.' }
+    const dnd = obj.dnd as Record<string, unknown>
+    if (typeof dnd.manualActive !== 'boolean') return { valid: false, reason: '"dnd.manualActive" must be a boolean.' }
+    if (typeof dnd.scheduleEnabled !== 'boolean') return { valid: false, reason: '"dnd.scheduleEnabled" must be a boolean.' }
+    if (typeof dnd.startTime !== 'string' || !/^\d{2}:\d{2}$/.test(dnd.startTime as string)) {
+      return { valid: false, reason: '"dnd.startTime" must be HH:MM format.' }
+    }
+    if (typeof dnd.endTime !== 'string' || !/^\d{2}:\d{2}$/.test(dnd.endTime as string)) {
+      return { valid: false, reason: '"dnd.endTime" must be HH:MM format.' }
+    }
+  }
+
+  if (obj.layout !== undefined) {
+    if (typeof obj.layout !== 'object' || Array.isArray(obj.layout)) return { valid: false, reason: '"layout" must be an object.' }
+    const layout = obj.layout as Record<string, unknown>
+    if (layout.mode !== undefined && layout.mode !== 'sidebar' && layout.mode !== 'tabs') {
+      return { valid: false, reason: '"layout.mode" must be "sidebar" or "tabs".' }
+    }
+  }
+
+  if (obj.general !== undefined) {
+    if (typeof obj.general !== 'object' || Array.isArray(obj.general)) return { valid: false, reason: '"general" must be an object.' }
+    const general = obj.general as Record<string, unknown>
+    if (general.closeToTray !== undefined && typeof general.closeToTray !== 'boolean') {
+      return { valid: false, reason: '"general.closeToTray" must be a boolean.' }
+    }
+  }
+
+  return { valid: true }
+}
+
 app.whenReady().then(() => {
   // Watch window shortcuts (F12, etc.) in dev mode
   app.on('browser-window-created', (_, window) => {
@@ -542,7 +630,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('set-layout-mode', (_, mode: 'sidebar' | 'tabs') => {
     store.set('layout.mode', mode)
-    pushConfigToCloud()
+    debouncedPushConfigToCloud()
   })
 
   ipcMain.handle('get-services', () => {
@@ -550,20 +638,43 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('save-services', (_, services: any[]) => {
+    const previousServices = store.get('services') || []
     store.set('services', services)
     applyDndState()
-    pushConfigToCloud()
+    debouncedPushConfigToCloud()
+
+    // Destroy WebContentsViews for services that have been disabled to free Chromium memory
+    for (const prev of previousServices) {
+      const current = services.find((s) => s.id === prev.id)
+      if (prev.enabled && current && !current.enabled) {
+        const view = serviceViews.get(prev.id)
+        if (view) {
+          try {
+            if (mainWindow && !view.webContents.isDestroyed()) {
+              mainWindow.contentView.removeChildView(view)
+            }
+            ;(view.webContents as any).destroy()
+          } catch (_) { /* ignore */ }
+          serviceViews.delete(prev.id)
+          serviceUnreads.delete(prev.id)
+        }
+      }
+    }
   })
 
   ipcMain.handle('switch-service', (_, id: string | null) => {
     if (activeServiceId === id) return
+
     if (activeServiceId && mainWindow) {
       const activeView = serviceViews.get(activeServiceId)
       if (activeView) {
         mainWindow.contentView.removeChildView(activeView)
+        // Put the outgoing service into throttled mode — WebSocket stays alive for
+        // notifications, but Chromium can aggressively GC its V8 heap.
+        activeView.webContents.setBackgroundThrottling(true)
       }
     }
-    
+
     if (id === null) {
       activeServiceId = null
       return
@@ -571,9 +682,12 @@ app.whenReady().then(() => {
 
     const view = getOrCreateView(id)
     if (view && mainWindow) {
+      // Restore full performance for the service the user is actively viewing
+      view.webContents.setBackgroundThrottling(false)
       mainWindow.contentView.addChildView(view)
       view.setBounds(contentBounds)
       activeServiceId = id
+      serviceLastActive.set(id, Date.now())
     }
   })
 
@@ -749,7 +863,7 @@ app.whenReady().then(() => {
   ipcMain.handle('set-dnd-config', (_, config: any) => {
     store.set('dnd', config)
     evaluateDndState()
-    pushConfigToCloud()
+    debouncedPushConfigToCloud()
   })
 
   ipcMain.handle('get-dnd-active', () => {
@@ -769,6 +883,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-app-version', () => {
     return app.getVersion()
+  })
+
+  ipcMain.handle('open-external', (_event, url: string) => {
+    return shell.openExternal(url)
   })
 
   ipcMain.handle('get-general-config', () => {
@@ -854,6 +972,19 @@ app.whenReady().then(() => {
 
   autoUpdater.on('update-downloaded', (info) => {
     mainWindow?.webContents.send('update-downloaded', info);
+
+    // Notify the user via a native OS toast — works even if Settings panel isn't open
+    try {
+      const notif = new Notification({
+        title: 'Gradd update ready',
+        body: `Version ${info.version} downloaded. Click to install and restart.`,
+        silent: false
+      })
+      notif.on('click', () => autoUpdater.quitAndInstall())
+      notif.show()
+    } catch (e) {
+      console.error('[Updater] Failed to show update notification:', e)
+    }
   });
 
   ipcMain.handle('check-for-updates', async () => {
@@ -881,23 +1012,22 @@ app.whenReady().then(() => {
   // --- Export / Import Setup ---
   ipcMain.handle('export-config', async () => {
     if (!mainWindow) return { success: false, error: 'No main window' };
-    const { canceled, filePath } = await require('electron').dialog.showSaveDialog(mainWindow, {
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
       title: 'Export Gradd Configuration',
       defaultPath: 'gradd-config.json',
       filters: [{ name: 'JSON Files', extensions: ['json'] }]
     });
-    
+
     if (canceled || !filePath) return { success: false };
-    
+
     try {
-      const fs = require('fs');
       const dataToExport = {
         services: store.get('services'),
         dnd: store.get('dnd'),
         layout: store.get('layout'),
         general: store.get('general')
       };
-      fs.writeFileSync(filePath, JSON.stringify(dataToExport, null, 2), 'utf-8');
+      writeFileSync(filePath, JSON.stringify(dataToExport, null, 2), 'utf-8');
       return { success: true };
     } catch (err) {
       console.error('Export failed:', err);
@@ -907,7 +1037,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('import-config', async () => {
     if (!mainWindow) return { success: false, error: 'No main window' };
-    const { canceled, filePaths } = await require('electron').dialog.showOpenDialog(mainWindow, {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
       title: 'Import Gradd Configuration',
       filters: [{ name: 'JSON Files', extensions: ['json'] }],
       properties: ['openFile']
@@ -916,22 +1046,33 @@ app.whenReady().then(() => {
     if (canceled || filePaths.length === 0) return { success: false };
 
     try {
-      const fs = require('fs');
-      const rawData = fs.readFileSync(filePaths[0], 'utf-8');
-      const parsedData = JSON.parse(rawData);
+      const rawData = readFileSync(filePaths[0], 'utf-8');
+      let parsedData: unknown;
+      try {
+        parsedData = JSON.parse(rawData);
+      } catch {
+        return { success: false, error: 'File is not valid JSON.' };
+      }
 
-      // Apply imported data
-      if (parsedData.services) store.set('services', parsedData.services);
-      if (parsedData.dnd) store.set('dnd', parsedData.dnd);
-      if (parsedData.layout) store.set('layout', parsedData.layout);
-      if (parsedData.general) store.set('general', parsedData.general);
+      // Reject anything that doesn't match the expected config shape.
+      // Without this check, a crafted file could inject arbitrary service URLs
+      // that would be silently loaded in WebContentsViews after relaunch.
+      const validation = validateImportedConfig(parsedData);
+      if (!validation.valid) {
+        console.error('Import rejected — schema validation failed:', validation.reason);
+        return { success: false, error: `Invalid configuration file: ${validation.reason}` };
+      }
 
-      // Force UI refresh and state sync
+      const data = parsedData as Record<string, unknown>;
+      if (data.services) store.set('services', data.services);
+      if (data.dnd) store.set('dnd', data.dnd);
+      if (data.layout) store.set('layout', data.layout);
+      if (data.general) store.set('general', data.general);
+
       mainWindow.webContents.send('services-updated', store.get('services'));
       evaluateDndState();
       pushConfigToCloud();
 
-      // Trigger app restart to cleanly apply layout and service changes
       app.relaunch();
       app.exit(0);
 
@@ -966,7 +1107,7 @@ app.whenReady().then(() => {
     });
   }
 
-  // Auto-login on startup if token exists
+  // Auto-login on startup if a stored refresh token exists
   setTimeout(async () => {
     const auth = store.get('auth');
     if (auth && auth.refreshToken) {
@@ -978,8 +1119,21 @@ app.whenReady().then(() => {
           setupCloudSyncListener(uid);
           console.log(`[Main] Auto-login restored session for UID: ${uid}`);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('[Main] Auto-login failed:', err);
+        // Token is stale or the OAuth client changed (e.g. client_secret removed).
+        // Clear it so the error doesn't repeat on every startup — user re-logs in Settings.
+        const msg: string = err?.message ?? '';
+        if (
+          msg.includes('client_secret') ||
+          msg.includes('invalid_client') ||
+          msg.includes('invalid_grant') ||
+          msg.includes('Token has been expired')
+        ) {
+          store.delete('auth' as any);
+          console.warn('[Main] Cleared stale auth token — please sign in again via Settings.');
+          if (mainWindow) mainWindow.webContents.send('services-updated', store.get('services'));
+        }
       }
     }
   }, 1000);
@@ -987,20 +1141,45 @@ app.whenReady().then(() => {
   // Periodically evaluate DND state (every 30 seconds)
   setInterval(evaluateDndState, 30000)
 
-  // Periodically scrape unread counts for active tabs (every 3 seconds)
-  setInterval(runPeriodicUnreadScrape, 3000)
+  // Periodically scrape unread counts for background tabs (active tab uses title-update events)
+  setInterval(runPeriodicUnreadScrape, 8000)
 
   createWindow()
   createTray()
-  
+
   // Initialize DND state check on startup
   evaluateDndState()
+
+  // Silently check for updates 30 seconds after launch (production only)
+  if (!is.dev) {
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch((err) => {
+        console.error('[Updater] Background check failed:', err)
+      })
+    }, 30000)
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
     }
   })
+})
+
+app.on('before-quit', () => {
+  isQuitting = true
+  // Destroy all WebContentsViews to release Chromium renderer processes
+  for (const [, view] of serviceViews) {
+    try {
+      if (!view.webContents.isDestroyed()) {
+        // destroy() exists at runtime but is absent from Electron's bundled type stubs
+        ;(view.webContents as any).destroy()
+      }
+    } catch (_) {
+      // Ignore errors during shutdown
+    }
+  }
+  serviceViews.clear()
 })
 
 app.on('window-all-closed', () => {

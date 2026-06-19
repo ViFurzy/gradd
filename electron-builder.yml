@@ -1,4 +1,4 @@
-appId: com.electron.app
+appId: com.gradd.app
 productName: Gradd
 directories:
   buildResources: build

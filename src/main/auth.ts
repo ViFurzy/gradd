@@ -1,12 +1,11 @@
-import { safeStorage, BrowserWindow } from 'electron';
+import { safeStorage, shell } from 'electron';
 import * as crypto from 'crypto';
 import * as http from 'http';
 
-// These should be populated by the user's .env in a real environment
+// Public client ID only — no client secret needed for PKCE (native/desktop app flow).
+// The code_verifier/code_challenge pair is the proof of possession; a secret bundled
+// inside an Electron binary would be trivially extractable from the asar archive.
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-const CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '';
-const REDIRECT_URI = 'http://127.0.0.1:8765';
-const PORT = 8765;
 
 let authServer: http.Server | null = null;
 
@@ -19,112 +18,106 @@ function base64URLEncode(str: Buffer): string {
 
 export async function loginWithGoogle(): Promise<{ accessToken: string; idToken: string; refreshToken: string }> {
   if (!CLIENT_ID) {
-    throw new Error('Google Client ID is missing. Please set VITE_GOOGLE_CLIENT_ID in your .env file.');
+    throw new Error('Google Client ID is missing. Set VITE_GOOGLE_CLIENT_ID in your .env file.');
   }
 
   const verifier = base64URLEncode(crypto.randomBytes(32));
   const challenge = base64URLEncode(crypto.createHash('sha256').update(verifier).digest());
 
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-    `client_id=${CLIENT_ID}&` +
-    `redirect_uri=${REDIRECT_URI}&` +
-    `response_type=code&` +
-    `scope=openid%20profile%20email&` +
-    `code_challenge=${challenge}&` +
-    `code_challenge_method=S256&` +
-    `access_type=offline&` +
-    `prompt=consent`;
-
   return new Promise((resolve, reject) => {
-    let authWindow: BrowserWindow | null = null;
+    // Populated once the OS assigns a port; used in both the auth URL and token exchange.
+    let redirectUri = '';
 
-    if (authServer) {
-      authServer.close();
-    }
+    if (authServer) authServer.close();
 
     authServer = http.createServer(async (req, res) => {
       const url = new URL(req.url || '', `http://${req.headers.host}`);
-      if (url.pathname === '/') {
-        const code = url.searchParams.get('code');
-        const error = url.searchParams.get('error');
+      if (url.pathname !== '/') return;
 
-        if (error) {
-          res.end('<h1>Authentication failed</h1><p>You can close this window.</p>');
-          if (authServer) authServer.close();
-          if (authWindow) authWindow.close();
-          reject(new Error(`OAuth Error: ${error}`));
-          return;
-        }
+      const code = url.searchParams.get('code');
+      const error = url.searchParams.get('error');
 
-        if (code) {
-          res.end('<h1>Authentication successful!</h1><p>You can close this window and return to Gradd.</p>');
-          if (authServer) authServer.close();
-          if (authWindow) authWindow.close();
+      // Friendly page shown in the browser after redirect
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(
+        error
+          ? `<!doctype html><html><body style="font-family:system-ui;padding:2rem">
+              <h2>Authentication failed</h2><p>You can close this tab and return to Gradd.</p>
+             </body></html>`
+          : `<!doctype html><html><body style="font-family:system-ui;padding:2rem">
+              <h2>Signed in successfully!</h2><p>You can close this tab and return to Gradd.</p>
+             </body></html>`
+      );
 
-          try {
-            const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: new URLSearchParams({
-                client_id: CLIENT_ID,
-                client_secret: CLIENT_SECRET,
-                code,
-                redirect_uri: REDIRECT_URI,
-                grant_type: 'authorization_code',
-                code_verifier: verifier
-              })
-            });
+      if (authServer) { authServer.close(); authServer = null; }
 
-            const tokens = await tokenResponse.json();
-            if (tokens.error) {
-              reject(new Error(tokens.error_description || tokens.error));
-            } else {
-              resolve({
-                accessToken: tokens.access_token,
-                idToken: tokens.id_token,
-                refreshToken: tokens.refresh_token
-              });
-            }
-          } catch (err) {
-            reject(err);
-          }
+      if (error) { reject(new Error(`OAuth Error: ${error}`)); return; }
+      if (!code) { reject(new Error('No authorization code received.')); return; }
+
+      try {
+        // PKCE token exchange — no client_secret; the code_verifier proves possession of
+        // the original code_challenge without needing a bundled secret.
+        const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: CLIENT_ID,
+            code,
+            redirect_uri: redirectUri,
+            grant_type: 'authorization_code',
+            code_verifier: verifier
+          })
+        });
+
+        const tokens = await tokenResponse.json();
+        if (tokens.error) {
+          reject(new Error(tokens.error_description || tokens.error));
         } else {
-          res.end('Invalid request');
+          resolve({
+            accessToken: tokens.access_token,
+            idToken: tokens.id_token,
+            refreshToken: tokens.refresh_token
+          });
         }
+      } catch (err) {
+        reject(err);
       }
     });
 
-    authServer.listen(PORT, '127.0.0.1', () => {
-      authWindow = new BrowserWindow({
-        width: 600,
-        height: 750,
-        title: 'Sign in with Google',
-        show: false,
-        autoHideMenuBar: true,
-        webPreferences: {
-          nodeIntegration: false,
-          contextIsolation: true
-        }
-      });
-      // Circumvent 'disallowed_useragent' by using a standard Chrome user agent
-      authWindow.webContents.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-      
-      authWindow.loadURL(authUrl);
-      
-      authWindow.once('ready-to-show', () => {
-        if (authWindow) authWindow.show();
-      });
+    // port: 0 lets the OS pick a free port — prevents another local process from
+    // pre-binding to a hardcoded port and racing the OAuth callback.
+    authServer.listen(0, '127.0.0.1', () => {
+      const addr = authServer!.address() as { port: number };
+      redirectUri = `http://127.0.0.1:${addr.port}`;
 
-      authWindow.on('closed', () => {
-        authWindow = null;
+      const authUrl =
+        `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${encodeURIComponent(CLIENT_ID)}&` +
+        `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+        `response_type=code&` +
+        `scope=openid%20profile%20email&` +
+        `code_challenge=${challenge}&` +
+        `code_challenge_method=S256&` +
+        `access_type=offline&` +
+        `prompt=consent`;
+
+      // Open in the user's real default browser — no UA spoofing, no embedded WebView warnings,
+      // and the user sees their full Google account history/picker.
+      shell.openExternal(authUrl).catch((err) => {
+        if (authServer) { authServer.close(); authServer = null; }
+        reject(new Error(`Failed to open browser: ${err.message}`));
       });
     });
 
-    // Timeout after 5 minutes
+    authServer.once('error', (err) => {
+      reject(new Error(`Failed to start OAuth callback server: ${err.message}`));
+    });
+
+    // Abort after 5 minutes
     setTimeout(() => {
       if (authServer) {
         authServer.close();
-        if (authWindow) authWindow.close();
+        authServer = null;
         reject(new Error('Authentication timed out.'));
       }
     }, 5 * 60 * 1000);
@@ -133,15 +126,15 @@ export async function loginWithGoogle(): Promise<{ accessToken: string; idToken:
 
 export async function refreshGoogleToken(refreshToken: string): Promise<{ accessToken: string; idToken: string }> {
   if (!CLIENT_ID) {
-    throw new Error('Google Client ID is missing. Please set VITE_GOOGLE_CLIENT_ID in your .env file.');
+    throw new Error('Google Client ID is missing. Set VITE_GOOGLE_CLIENT_ID in your .env file.');
   }
 
+  // No client_secret — public PKCE client refresh flow.
   const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
       refresh_token: refreshToken,
       grant_type: 'refresh_token'
     })
@@ -162,7 +155,9 @@ export function encryptToken(token: string): string {
   if (safeStorage.isEncryptionAvailable()) {
     return safeStorage.encryptString(token).toString('base64');
   }
-  // Fallback if encryption is not available (e.g. Linux without keyring)
+  // safeStorage unavailable (e.g. Linux without a keyring). Log a warning — the token
+  // is stored as base64 only, which is encoding not encryption.
+  console.warn('[Auth] safeStorage unavailable — refresh token stored without encryption.');
   return Buffer.from(token).toString('base64');
 }
 

@@ -4,8 +4,9 @@
   "type": "module",
   "description": "An Electron application with React and TypeScript",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "ViFurzy <contact@vi-design.pro>",
+  "homepage": "https://vi-design.pro",
+  "license": "MIT",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",

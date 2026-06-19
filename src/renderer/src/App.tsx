@@ -58,14 +58,7 @@ function App(): React.JSX.Element {
   }, [showSettings])
 
   const handleLogout = async () => {
-    const clearSetup = window.confirm(
-      'You are about to log out.\n\nDo you want to CLEAR your local setup/data? Press OK to clear everything and reset to default, or Cancel to keep your settings.'
-    )
-    if (clearSetup) {
-      await window.api.clearConfig()
-    } else {
-      await logoutGoogle()
-    }
+    await logoutGoogle()
   }
 
   const totalUnreadCount = services
@@ -142,6 +135,8 @@ function App(): React.JSX.Element {
   useEffect(() => {
     if (!contentRef.current) return
 
+    let rafId: number | null = null
+
     const updateBounds = (): void => {
       if (!contentRef.current) return
       const rect = contentRef.current.getBoundingClientRect()
@@ -153,21 +148,29 @@ function App(): React.JSX.Element {
       })
     }
 
+    // Debounce via rAF — coalesces rapid resize events into one IPC call per frame
+    const debouncedUpdateBounds = (): void => {
+      if (rafId !== null) cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => {
+        rafId = null
+        updateBounds()
+      })
+    }
+
     // Run immediately to capture layout mount bounds
     updateBounds()
 
     // Trigger bounds updates on container resizes
-    const observer = new ResizeObserver(() => {
-      updateBounds()
-    })
+    const observer = new ResizeObserver(debouncedUpdateBounds)
     observer.observe(contentRef.current)
 
     // Trigger bounds updates on window resize
-    window.addEventListener('resize', updateBounds)
+    window.addEventListener('resize', debouncedUpdateBounds)
 
     return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId)
       observer.disconnect()
-      window.removeEventListener('resize', updateBounds)
+      window.removeEventListener('resize', debouncedUpdateBounds)
     }
   }, [layoutMode, activeServiceId, activePanel])
 
@@ -710,6 +713,7 @@ function DirectoryDashboard(): React.JSX.Element {
 function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Element {
   const { dndConfig, isDndActive, updateDndConfig, authState, loginGoogle, generalConfig, updateGeneralConfig } = useLayoutStore()
   const [clearingState, setClearingState] = useState<'idle' | 'clearing' | 'success'>('idle')
+  const [resetConfirming, setResetConfirming] = useState(false)
   const [appVersion, setAppVersion] = useState<string>('0.0.0')
   const [checkingState, setCheckingState] = useState<'idle' | 'checking' | 'up-to-date' | 'available' | 'downloaded' | 'error'>('idle')
   const [updateError, setUpdateError] = useState<string>('')
@@ -1024,6 +1028,43 @@ function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Elemen
               Application caches cleared. Please close and relaunch Gradd to sign in again.
             </div>
           )}
+
+          {/* Reset App to Defaults */}
+          <div className="flex items-center justify-between border-t border-surface-border/50 pt-4">
+            <div>
+              <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">
+                Reset App to Defaults
+              </h3>
+              <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
+                Wipes all settings, service configuration, and sessions. Gradd restarts fresh. Cannot be undone.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {resetConfirming ? (
+                <>
+                  <button
+                    onClick={() => setResetConfirming(false)}
+                    className="no-drag px-3 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none bg-secondary hover:bg-hover-surface text-text-muted border border-surface-border"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => window.api.clearConfig()}
+                    className="no-drag px-3 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none bg-destructive hover:bg-destructive/80 text-white"
+                  >
+                    Yes, reset everything
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setResetConfirming(true)}
+                  className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none bg-destructive/10 hover:bg-destructive/20 text-destructive"
+                >
+                  Reset App
+                </button>
+              )}
+            </div>
+          </div>
         </section>
 
         {/* Section: Version & Updates */}
@@ -1093,6 +1134,20 @@ function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Elemen
               Failed to check for updates. {updateError}
             </div>
           )}
+          <div className="border-t border-surface-border/50 pt-3 mt-1 flex items-center justify-between">
+            <span className="text-xs text-text-muted">
+              v{appVersion} · MIT License
+            </span>
+            <a
+              href="https://vi-design.pro"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => { e.preventDefault(); window.api.openExternal('https://vi-design.pro') }}
+              className="text-xs text-text-muted hover:text-text-primary transition-colors duration-150 cursor-pointer"
+            >
+              ViFurzy · vi-design.pro
+            </a>
+          </div>
         </section>
 
 
