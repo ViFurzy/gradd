@@ -23,7 +23,7 @@ interface LayoutState {
   activeServiceId: string | null
   activePanel: 'directory' | 'settings' | 'service'
   authState: { loggedIn: boolean; uid?: string; photoURL?: string }
-  generalConfig: { closeToTray: boolean; showTabLabels: boolean }
+  generalConfig: { closeToTray: boolean; showTabLabels: boolean; showLoadingBar: boolean }
   setLayoutMode: (mode: 'sidebar' | 'tabs') => Promise<void>
   selectService: (id: string | null) => Promise<void>
   toggleService: (id: string) => Promise<void>
@@ -37,7 +37,7 @@ interface LayoutState {
   updateDndConfig: (config: Partial<DndConfig>) => Promise<void>
   setDndActiveState: (active: boolean) => void
   reorderServices: (enabledServices: ServiceConfig[]) => Promise<void>
-  updateGeneralConfig: (config: Partial<{ closeToTray: boolean; showTabLabels: boolean }>) => Promise<void>
+  updateGeneralConfig: (config: Partial<{ closeToTray: boolean; showTabLabels: boolean; showLoadingBar: boolean }>) => Promise<void>
   loginGoogle: () => Promise<void>
   logoutGoogle: () => Promise<void>
 }
@@ -54,7 +54,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     startTime: '22:00',
     endTime: '08:00'
   },
-  generalConfig: { closeToTray: true, showTabLabels: true },
+  generalConfig: { closeToTray: true, showTabLabels: true, showLoadingBar: true },
   isDndActive: false,
   setLayoutMode: async (mode) => {
     set({ layoutMode: mode })

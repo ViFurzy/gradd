@@ -44,6 +44,7 @@ function App(): React.JSX.Element {
   } = useLayoutStore()
   const [hoveredToggle, setHoveredToggle] = useState(false)
   const [draggedServiceId, setDraggedServiceId] = useState<string | null>(null)
+  const [loadingServices, setLoadingServices] = useState<Set<string>>(new Set())
   const contentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -83,6 +84,21 @@ function App(): React.JSX.Element {
       setDndActiveState(active)
     })
   }, [setDndActiveState])
+
+  // Listen for service loading state changes from Electron main process
+  useEffect(() => {
+    window.api.onServiceLoading((data) => {
+      setLoadingServices((prev) => {
+        const next = new Set(prev)
+        if (data.loading) {
+          next.add(data.serviceId)
+        } else {
+          next.delete(data.serviceId)
+        }
+        return next
+      })
+    })
+  }, [])
 
   // Listen for services list updates from Electron main process (e.g. from context menus)
   useEffect(() => {
@@ -386,8 +402,11 @@ function App(): React.JSX.Element {
             {/* Content Area */}
             <main
               ref={contentRef}
-              className="flex-1 h-full bg-transparent flex flex-col items-center justify-start overflow-hidden content-area"
+              className="relative flex-1 h-full bg-transparent flex flex-col items-center justify-start overflow-hidden content-area"
             >
+              {activePanel === 'service' && activeServiceId && loadingServices.has(activeServiceId) && generalConfig?.showLoadingBar !== false && (
+                <LoadingBar />
+              )}
               {activePanel === 'directory' ? <DirectoryDashboard /> : null}
               {activePanel === 'settings' ? <SettingsPanel onLogout={handleLogout} /> : null}
             </main>
@@ -527,14 +546,35 @@ function App(): React.JSX.Element {
             {/* Content Area */}
             <main
               ref={contentRef}
-              className="flex-1 h-full bg-transparent flex flex-col items-center justify-start overflow-hidden content-area"
+              className="relative flex-1 h-full bg-transparent flex flex-col items-center justify-start overflow-hidden content-area"
             >
+              {activePanel === 'service' && activeServiceId && loadingServices.has(activeServiceId) && generalConfig?.showLoadingBar !== false && (
+                <LoadingBar />
+              )}
               {activePanel === 'directory' ? <DirectoryDashboard /> : null}
               {activePanel === 'settings' ? <SettingsPanel onLogout={handleLogout} /> : null}
             </main>
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function LoadingBar(): React.JSX.Element {
+  return (
+    <div className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden z-50">
+      <div className="h-full bg-accent loading-bar-sweep" />
+      <style>{`
+        @keyframes loading-bar-sweep {
+          0%   { transform: translateX(-100%); width: 60%; }
+          50%  { transform: translateX(60%);   width: 40%; }
+          100% { transform: translateX(200%);  width: 60%; }
+        }
+        .loading-bar-sweep {
+          animation: loading-bar-sweep 1.4s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   )
 }
@@ -833,6 +873,30 @@ function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Elemen
               <div
                 className={`absolute top-[3px] left-[3px] w-4.5 h-4.5 rounded-full bg-text-primary shadow transform transition-transform duration-150 ${
                   generalConfig?.showTabLabels !== false ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Show Loading Bar Toggle */}
+          <div className="flex items-center justify-between border-t border-surface-border/50 pt-4 mt-1">
+            <div>
+              <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">
+                Show loading bar on tab switch
+              </h3>
+              <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
+                When enabled, a thin animated bar appears at the top of the content area while a service is loading.
+              </p>
+            </div>
+            <button
+              onClick={() => updateGeneralConfig({ showLoadingBar: generalConfig?.showLoadingBar === false })}
+              className={`no-drag relative w-10 h-6 rounded-full transition-colors duration-150 cursor-pointer focus:outline-none ${
+                generalConfig?.showLoadingBar !== false ? 'bg-accent' : 'bg-dominant border border-surface-border'
+              }`}
+            >
+              <div
+                className={`absolute top-[3px] left-[3px] w-4.5 h-4.5 rounded-full bg-text-primary shadow transform transition-transform duration-150 ${
+                  generalConfig?.showLoadingBar !== false ? 'translate-x-4' : 'translate-x-0'
                 }`}
               />
             </button>
