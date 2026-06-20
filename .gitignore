@@ -32,6 +32,10 @@ HANDOVER.md
 .eslintcache
 *.tsbuildinfo
 
+# Tests
+tests
+playwright.config.ts
+
 # Test output
 test-results
 playwright-report
