@@ -39,6 +39,7 @@ function App(): React.JSX.Element {
     setDndActiveState,
     reorderServices,
     authState,
+    generalConfig,
     logoutGoogle
   } = useLayoutStore()
   const [hoveredToggle, setHoveredToggle] = useState(false)
@@ -62,7 +63,7 @@ function App(): React.JSX.Element {
   }
 
   const totalUnreadCount = services
-    .filter((s) => s.enabled)
+    .filter((s) => s.enabled && !s.muted)
     .reduce((sum, s) => sum + (s.unreadCount || 0), 0)
 
   useEffect(() => {
@@ -296,7 +297,7 @@ function App(): React.JSX.Element {
                         )}
                         {getServiceIcon(service.type)}
                         {/* Unread badge */}
-                        {service.unreadCount && service.unreadCount > 0 ? (
+                        {service.unreadCount && service.unreadCount > 0 && !service.muted ? (
                           <div className="absolute top-1.5 right-2 min-w-[15px] h-3.5 bg-destructive text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 shadow border border-secondary leading-none select-none">
                             {service.unreadCount}
                           </div>
@@ -394,7 +395,7 @@ function App(): React.JSX.Element {
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Top Tab Bar Layout */}
-            <div className="h-10 min-h-10 bg-secondary border-b border-surface-border flex items-center justify-between px-2 select-none">
+            <div className="h-[46px] min-h-[46px] bg-secondary border-b border-surface-border flex items-center justify-between px-2 select-none">
               {/* Tabs list */}
               <div className="flex items-center gap-1 overflow-x-auto h-full flex-1 no-scrollbar">
                 {/* Directory Logo button on the left */}
@@ -407,11 +408,11 @@ function App(): React.JSX.Element {
                   }`}
                   title="Services Directory"
                 >
-                  <img src={logoImg} className="w-5 h-5 object-contain select-none pointer-events-none" alt="" />
+                  <img src={logoImg} className="w-[22px] h-[22px] object-contain select-none pointer-events-none" alt="" />
                 </button>
 
                 {/* Vertical Separator */}
-                <div className="w-[1px] h-5 bg-surface-border mx-1 self-center" />
+                <div className="w-[1px] h-6 bg-surface-border mx-1 self-center" />
 
                 {enabledServices.map((service, index) => {
                   const isActive = activeServiceId === service.id && activePanel === 'service'
@@ -447,15 +448,17 @@ function App(): React.JSX.Element {
                             : 'border-transparent text-text-muted hover:bg-hover-surface hover:text-text-primary'
                         } ${isDragged ? 'opacity-30 scale-95 bg-active-surface/30' : ''}`}
                       >
-                        <span className="flex items-center text-sm">
+                        <span className="flex items-center text-[15px]">
                           {getServiceIcon(service.type)}
                         </span>
-                        <span className="text-xs font-normal leading-[1.4]">{service.name}</span>
+                        {generalConfig?.showTabLabels !== false && (
+                          <span className="text-xs font-normal leading-[1.4]">{service.name}</span>
+                        )}
                         {service.muted && (
                           <SpeakerSlash size={12} weight="bold" className="text-[#e5534b] flex-shrink-0" />
                         )}
                         {/* Unread badge */}
-                        {service.unreadCount && service.unreadCount > 0 ? (
+                        {service.unreadCount && service.unreadCount > 0 && !service.muted ? (
                           <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-destructive text-white leading-none shadow select-none">
                             {service.unreadCount}
                           </span>
@@ -473,7 +476,7 @@ function App(): React.JSX.Element {
               <div className="flex items-center gap-1">
                 {isDndActive && (
                   <div
-                    className="w-8 h-8 flex items-center justify-center text-accent animate-pulse"
+                    className="w-9 h-9 flex items-center justify-center text-accent animate-pulse"
                     title="Do Not Disturb is Active"
                   >
                     <Moon size={18} weight="fill" />
@@ -483,7 +486,7 @@ function App(): React.JSX.Element {
                 {/* Layout Toggle Icon Button */}
                 <button
                   onClick={toggleLayout}
-                  className="no-drag text-text-muted hover:text-text-primary w-8 h-8 flex items-center justify-center transition-all duration-150 rounded hover:bg-hover-surface cursor-pointer"
+                  className="no-drag text-text-muted hover:text-text-primary w-9 h-9 flex items-center justify-center transition-all duration-150 rounded hover:bg-hover-surface cursor-pointer"
                   title="Switch to Sidebar"
                 >
                   <ArrowsLeftRight size={18} weight="bold" />
@@ -492,7 +495,7 @@ function App(): React.JSX.Element {
                 {/* Settings Gear Icon Button */}
                 <button
                   onClick={showSettings}
-                  className={`no-drag w-8 h-8 flex items-center justify-center transition-all duration-150 rounded hover:bg-hover-surface cursor-pointer ${
+                  className={`no-drag w-9 h-9 flex items-center justify-center transition-all duration-150 rounded hover:bg-hover-surface cursor-pointer ${
                     activePanel === 'settings'
                       ? 'bg-active-surface text-accent'
                       : 'text-text-muted hover:text-text-primary bg-transparent'
@@ -507,7 +510,7 @@ function App(): React.JSX.Element {
                   <div className="ml-1 pl-2 border-l border-surface-border/50 flex items-center h-full relative">
                     <button
                       onClick={() => window.api.showProfileMenu()}
-                      className="no-drag w-6 h-6 rounded-full overflow-hidden border border-surface-border cursor-pointer hover:border-accent transition-all duration-150"
+                      className="no-drag w-7 h-7 rounded-full overflow-hidden border border-surface-border cursor-pointer hover:border-accent transition-all duration-150"
                       title="Google Account"
                     >
                       <img 
@@ -711,7 +714,7 @@ function DirectoryDashboard(): React.JSX.Element {
 }
 
 function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Element {
-  const { dndConfig, isDndActive, updateDndConfig, authState, loginGoogle, generalConfig, updateGeneralConfig } = useLayoutStore()
+  const { dndConfig, isDndActive, updateDndConfig, authState, loginGoogle, generalConfig, updateGeneralConfig, layoutMode } = useLayoutStore()
   const [clearingState, setClearingState] = useState<'idle' | 'clearing' | 'success'>('idle')
   const [resetConfirming, setResetConfirming] = useState(false)
   const [appVersion, setAppVersion] = useState<string>('0.0.0')
@@ -791,7 +794,7 @@ function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Elemen
                 Keep running in background
               </h3>
               <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
-                When enabled, closing the window will minimize Gradd to the system tray. 
+                When enabled, closing the window will minimize Gradd to the system tray.
                 When disabled, closing the window will fully quit the app.
               </p>
             </div>
@@ -804,6 +807,32 @@ function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Elemen
               <div
                 className={`absolute top-[3px] left-[3px] w-4.5 h-4.5 rounded-full bg-text-primary shadow transform transition-transform duration-150 ${
                   generalConfig?.closeToTray !== false ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Show Tab Labels Toggle */}
+          <div className={`flex items-center justify-between border-t border-surface-border/50 pt-4 mt-1 ${layoutMode !== 'tabs' ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div>
+              <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">
+                Show service names in top bar
+              </h3>
+              <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
+                When enabled, each tab in the top bar shows the service name next to its icon.
+                Disable for a more compact, icon-only tab bar.
+                {layoutMode !== 'tabs' && <span className="ml-1 text-text-muted/60">(Switch to top bar layout to use this setting.)</span>}
+              </p>
+            </div>
+            <button
+              onClick={() => updateGeneralConfig({ showTabLabels: generalConfig?.showTabLabels === false })}
+              className={`no-drag relative w-10 h-6 rounded-full transition-colors duration-150 cursor-pointer focus:outline-none ${
+                generalConfig?.showTabLabels !== false ? 'bg-accent' : 'bg-dominant border border-surface-border'
+              }`}
+            >
+              <div
+                className={`absolute top-[3px] left-[3px] w-4.5 h-4.5 rounded-full bg-text-primary shadow transform transition-transform duration-150 ${
+                  generalConfig?.showTabLabels !== false ? 'translate-x-4' : 'translate-x-0'
                 }`}
               />
             </button>

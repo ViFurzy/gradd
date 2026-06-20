@@ -32,8 +32,8 @@ export interface GraddAPI {
   loginGoogle(): Promise<{ success: boolean; uid?: string; error?: string; photoURL?: string }>
   logoutGoogle(): Promise<{ success: boolean; error?: string }>
   getAuthStatus(): Promise<{ loggedIn: boolean; uid?: string; photoURL?: string }>
-  getGeneralConfig(): Promise<{ closeToTray: boolean }>
-  setGeneralConfig(config: { closeToTray: boolean }): Promise<void>
+  getGeneralConfig(): Promise<{ closeToTray: boolean; showTabLabels: boolean }>
+  setGeneralConfig(config: { closeToTray: boolean; showTabLabels: boolean }): Promise<void>
   exportConfig(): Promise<{ success: boolean; error?: string }>
   importConfig(): Promise<{ success: boolean; error?: string }>
   clearConfig(): Promise<void>
