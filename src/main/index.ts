@@ -1017,6 +1017,15 @@ function validateImportedConfig(data: unknown): { valid: boolean; reason?: strin
   return { valid: true }
 }
 
+// Block Ctrl+R / Ctrl+Shift+R / F5 across every webContents (main window + all service views)
+app.on('web-contents-created', (_, contents) => {
+  contents.on('before-input-event', (event, input) => {
+    if ((input.control && (input.key === 'r' || input.key === 'R')) || input.key === 'F5') {
+      event.preventDefault()
+    }
+  })
+})
+
 app.whenReady().then(() => {
   isDev = !app.isPackaged
   initStore(app.getPath('userData'))
