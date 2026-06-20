@@ -63,6 +63,10 @@ const serviceViews = new Map<string, WebContentsViewType>()
 // Tracks when each service was last viewed (ms). Used to throttle inactive renderers.
 const serviceLastActive = new Map<string, number>()
 const serviceUnreads = new Map<string, number>()
+// Counts how many consecutive scrape cycles returned 0 for each service.
+// A count is only cleared to 0 after 2 consecutive zeros — prevents a single
+// transient DOM state (e.g. Messenger React re-render) from flashing the badge off.
+const serviceZeroStreak = new Map<string, number>()
 let activeServiceId: string | null = null
 let contentBounds = { x: 0, y: 0, width: 0, height: 0 }
 let dndActive = false
@@ -175,26 +179,50 @@ function saveLastVisitedUrl(serviceId: string, url: string): void {
 }
 
 function handleUnreadCountChange(serviceId: string, count: number): void {
+  // If the window is focused and this is the active tab, the user can already see
+  // the conversation — don't flash a badge for messages they're actively reading.
+  if (count > 0 && serviceId === activeServiceId && mainWindow?.isFocused()) {
+    count = 0
+  }
+
   const currentCount = serviceUnreads.get(serviceId) || 0
+
+  if (count > 0) {
+    // Positive count: reset zero streak and apply immediately
+    serviceZeroStreak.set(serviceId, 0)
+  } else {
+    // Zero: require 2 consecutive zeros before clearing a live badge.
+    // This absorbs single-cycle DOM misses (e.g. Messenger React re-renders,
+    // Telegram loading states) without introducing noticeable delay.
+    const streak = (serviceZeroStreak.get(serviceId) || 0) + 1
+    serviceZeroStreak.set(serviceId, streak)
+    if (streak < 2 && currentCount > 0) return
+  }
+
   if (currentCount === count) return
 
   serviceUnreads.set(serviceId, count)
 
-  // Dispatch unread update to renderer process
   if (mainWindow) {
     mainWindow.webContents.send('unread-counts-updated', { serviceId, count })
   }
 }
 
-async function scrapeUnreadCount(view: WebContentsViewType, type: string): Promise<number> {
+async function scrapeUnreadCount(view: WebContentsViewType, type: string, currentCount = 0): Promise<number> {
   try {
     if (view.webContents.isDestroyed()) return 0
 
-    // First try title-based unread parsing as it's standard and instant
+    // Title-based detection — fast path for new/changed counts only.
+    // When the title count differs from what we already have, use it immediately
+    // (e.g. a new message just arrived). When it matches our current count, fall
+    // through to the DOM scraper — the title may be stale (apps like Telegram don't
+    // always clear "(N)" from their title when the user reads messages inside Gradd).
     const title = view.webContents.getTitle()
-    const match = title.match(/\((\d+)\)/)
-    if (match) {
-      return parseInt(match[1], 10)
+    const titleMatch = title.match(/\((\d+)\)/)
+    if (titleMatch) {
+      const titleCount = parseInt(titleMatch[1], 10)
+      if (titleCount !== currentCount) return titleCount
+      // titleCount === currentCount: fall through so DOM can report 0 if messages were read
     }
 
     // Custom Slack mention scraper
@@ -216,6 +244,298 @@ async function scrapeUnreadCount(view: WebContentsViewType, type: string): Promi
             }
           }
           return count;
+        })()
+      `).catch(() => 0)
+      return typeof result === 'number' ? result : 0
+    }
+
+    // Telegram Web: sum only COLORED (non-muted, non-archived) unread badges.
+    //
+    // Why color-based detection instead of class-based:
+    // Telegram Web A applies gray to muted/archived badges via a parent CSS rule
+    // (.chatlist-chat.is-muted .badge { color: gray }), so the badge element itself
+    // only carries the class "badge" — :not(.badge-muted) does NOT exclude them.
+    // The visual distinction (colored = real unread, gray = muted/archived) is a
+    // stable Telegram design contract we can rely on.
+    if (type === 'telegram') {
+      const result = await view.webContents.executeJavaScript(`
+        (() => {
+          let total = 0;
+          const root = document.querySelector('.chatlist, .chats-container') || document;
+          root.querySelectorAll('.badge').forEach(el => {
+            // Skip class-marked muted badges (older Telegram versions do set this)
+            if (el.classList.contains('badge-muted')) return;
+            // Skip gray badges: muted/archived badges are unsaturated (max channel
+            // minus min channel < 30). Real unread badges are teal/green/blue (> 50).
+            try {
+              const rgb = getComputedStyle(el).backgroundColor.match(/\\d+/g);
+              if (rgb && rgb.length >= 3) {
+                const r = +rgb[0], g = +rgb[1], b = +rgb[2];
+                if (Math.max(r,g,b) - Math.min(r,g,b) < 30) return;
+              }
+            } catch (_) {}
+            const text = el.textContent.trim();
+            if (/^\\d+$/.test(text)) {
+              const num = parseInt(text, 10);
+              if (num > 0 && num <= 9999) total += num;
+            }
+          });
+          return total;
+        })()
+      `).catch(() => 0)
+      return typeof result === 'number' ? result : 0
+    }
+
+    // Messenger: "(N) Messenger" title is the primary signal (handled at the top of this
+    // function). When the WebContentsView gains focus Messenger strips the count from the
+    // title, so the periodic scraper sees "Messenger" and would return 0. The fallback
+    // below keeps the badge alive by inspecting the DOM directly.
+    //
+    // Detection order:
+    //  1. aria-label with explicit count ("2 unread", "2 new messages")
+    //  2. data-testid attributes Meta uses internally
+    //  3. rows/items whose aria-label mentions "unread" or "new"
+    //  4. Color-based: Meta blue (~rgb(0,132,255)) small circle = unread dot per thread
+    if (type === 'messenger') {
+      const result = await view.webContents.executeJavaScript(`
+        (() => {
+          // S1: aria-label with explicit numeric count
+          let total = 0;
+          document.querySelectorAll('[aria-label]').forEach(el => {
+            const label = el.getAttribute('aria-label') || '';
+            const m = label.match(/(\\d+)\\s+(?:unread|new\\s+message)/i);
+            if (m) {
+              const n = parseInt(m[1], 10);
+              if (n > 0 && n <= 9999) total += n;
+            }
+          });
+          if (total > 0) return total;
+
+          // S2: data-testid attributes Meta uses for unread indicators
+          const testidEls = document.querySelectorAll(
+            '[data-testid*="unread" i], [data-testid*="new-message" i], [data-testid*="unseen" i]'
+          );
+          if (testidEls.length > 0) return testidEls.length;
+
+          // S3: rows or items (and their children) whose aria-label mentions "unread"/"new"
+          const seen = new Set();
+          [
+            '[role="row"][aria-label*="unread" i]',
+            '[role="listitem"][aria-label*="unread" i]',
+            '[role="row"][aria-label*="new" i]',
+            '[role="row"] [aria-label*="unread" i]',
+            '[role="listitem"] [aria-label*="unread" i]',
+          ].forEach(sel => {
+            document.querySelectorAll(sel).forEach(el => {
+              seen.add(el.closest('[role="row"],[role="listitem"]') || el);
+            });
+          });
+          if (seen.size > 0) return seen.size;
+
+          // S4: color-based — Meta's blue unread dot (~rgb(0,132,255)), small circle,
+          // one per unread thread in the conversation list.
+          // Cap total element checks at 80 to avoid perf impact on large chat lists.
+          const list =
+            document.querySelector('[role="grid"]') ||
+            document.querySelector('[role="list"]') ||
+            document.querySelector('ul');
+          if (!list) return 0;
+          let dotCount = 0, checked = 0;
+          const rows = list.querySelectorAll('[role="row"],[role="listitem"],li');
+          outer: for (const row of rows) {
+            for (const el of row.querySelectorAll('span,div,i')) {
+              if (checked++ >= 80) break outer;
+              try {
+                const rect = el.getBoundingClientRect();
+                if (rect.width < 6 || rect.width > 20 || Math.abs(rect.width - rect.height) > 4) continue;
+                const rgb = getComputedStyle(el).backgroundColor.match(/\\d+/g);
+                if (!rgb || rgb.length < 3) continue;
+                if (+rgb[0] < 30 && +rgb[1] > 80 && +rgb[1] < 200 && +rgb[2] > 200) {
+                  dotCount++;
+                  break;
+                }
+              } catch (_) {}
+            }
+          }
+          return dotCount;
+        })()
+      `).catch(() => 0)
+      return typeof result === 'number' ? result : 0
+    }
+
+    // Instagram: "(N) Instagram" title is the primary signal. After the app idles the
+    // WebContentsView may still be "focused" from Instagram's perspective, causing the
+    // title to revert to plain "Instagram". Same four-strategy fallback as Messenger.
+    if (type === 'instagram') {
+      const result = await view.webContents.executeJavaScript(`
+        (() => {
+          // S1: aria-label with explicit count
+          let total = 0;
+          document.querySelectorAll('[aria-label]').forEach(el => {
+            const label = el.getAttribute('aria-label') || '';
+            const m = label.match(/(\\d+)\\s+(?:unread|new\\s+message)/i);
+            if (m) {
+              const n = parseInt(m[1], 10);
+              if (n > 0 && n <= 9999) total = Math.max(total, n);
+            }
+          });
+          if (total > 0) return total;
+
+          // S2: data-testid
+          const testidEls = document.querySelectorAll(
+            '[data-testid*="unread" i], [data-testid*="new-message" i], [data-testid*="unseen" i]'
+          );
+          if (testidEls.length > 0) return testidEls.length;
+
+          // S3: a/li/listitem/link elements with "unread" in aria-label
+          let threadCount = 0;
+          document.querySelectorAll('[aria-label*="unread" i]').forEach(el => {
+            const tag = el.tagName.toLowerCase();
+            const role = el.getAttribute('role') || '';
+            if (tag === 'a' || tag === 'li' || role === 'listitem' || role === 'link') {
+              threadCount++;
+            }
+          });
+          if (threadCount > 0) return threadCount;
+
+          // S4: same Meta blue dot detection, capped at 80 element checks
+          const list =
+            document.querySelector('[role="grid"]') ||
+            document.querySelector('[role="list"]') ||
+            document.querySelector('ul');
+          if (!list) return 0;
+          let dotCount = 0, checked = 0;
+          const rows = list.querySelectorAll('[role="row"],[role="listitem"],li');
+          outer: for (const row of rows) {
+            for (const el of row.querySelectorAll('span,div,i')) {
+              if (checked++ >= 80) break outer;
+              try {
+                const rect = el.getBoundingClientRect();
+                if (rect.width < 6 || rect.width > 20 || Math.abs(rect.width - rect.height) > 4) continue;
+                const rgb = getComputedStyle(el).backgroundColor.match(/\\d+/g);
+                if (!rgb || rgb.length < 3) continue;
+                if (+rgb[0] < 30 && +rgb[1] > 80 && +rgb[1] < 200 && +rgb[2] > 200) {
+                  dotCount++;
+                  break;
+                }
+              } catch (_) {}
+            }
+          }
+          return dotCount;
+        })()
+      `).catch(() => 0)
+      return typeof result === 'number' ? result : 0
+    }
+
+    // WhatsApp Web: CSS classnames are obfuscated. Use aria-label and Meta blue dot detection
+    // (same DOM family as Messenger/Instagram — also a Meta product).
+    if (type === 'whatsapp') {
+      const result = await view.webContents.executeJavaScript(`
+        (() => {
+          // S1: aria-label with explicit numeric count
+          let total = 0;
+          document.querySelectorAll('[aria-label]').forEach(el => {
+            const label = el.getAttribute('aria-label') || '';
+            const m = label.match(/(\\d+)\\s+(?:unread|new\\s+message)/i);
+            if (m) {
+              const n = parseInt(m[1], 10);
+              if (n > 0 && n <= 9999) total += n;
+            }
+          });
+          if (total > 0) return total;
+
+          // S2: data-testid attributes WhatsApp uses for unread indicators
+          const testidEls = document.querySelectorAll(
+            '[data-testid*="unread" i], [data-testid*="new-message" i], [data-testid*="unseen" i]'
+          );
+          if (testidEls.length > 0) return testidEls.length;
+
+          // S3: rows whose aria-label or child aria-label mentions "unread"
+          const seen = new Set();
+          [
+            '[data-testid="cell-frame-container"][aria-label*="unread" i]',
+            '[role="row"][aria-label*="unread" i]',
+            '[role="listitem"][aria-label*="unread" i]',
+            '[data-testid="cell-frame-container"] [aria-label*="unread message" i]',
+          ].forEach(sel => {
+            document.querySelectorAll(sel).forEach(el => {
+              seen.add(el.closest('[data-testid="cell-frame-container"],[role="row"],[role="listitem"]') || el);
+            });
+          });
+          if (seen.size > 0) return seen.size;
+
+          // S4: Meta blue dot (~rgb(0,132,255)) in chat list rows, one dot per unread thread.
+          // Cap element checks at 80 to avoid perf impact on large chat lists.
+          const list =
+            document.querySelector('[data-testid="chat-list"]') ||
+            document.querySelector('[role="grid"]') ||
+            document.querySelector('[role="list"]');
+          if (!list) return 0;
+          let dotCount = 0, checked = 0;
+          const rows = list.querySelectorAll('[role="row"],[role="listitem"],[data-testid="cell-frame-container"]');
+          outer: for (const row of rows) {
+            for (const el of row.querySelectorAll('span,div,i')) {
+              if (checked++ >= 80) break outer;
+              try {
+                const rect = el.getBoundingClientRect();
+                if (rect.width < 6 || rect.width > 20 || Math.abs(rect.width - rect.height) > 4) continue;
+                const rgb = getComputedStyle(el).backgroundColor.match(/\\d+/g);
+                if (!rgb || rgb.length < 3) continue;
+                if (+rgb[0] < 30 && +rgb[1] > 80 && +rgb[1] < 200 && +rgb[2] > 200) {
+                  dotCount++;
+                  break;
+                }
+              } catch (_) {}
+            }
+          }
+          return dotCount;
+        })()
+      `).catch(() => 0)
+      return typeof result === 'number' ? result : 0
+    }
+
+    // Gadu-Gadu (gg.pl): standard web app, not obfuscated. Try aria-label, class
+    // patterns, and data attributes. Title "(N) GG" format may not exist — DOM scraper is
+    // the primary source.
+    if (type === 'gadugadu') {
+      const result = await view.webContents.executeJavaScript(`
+        (() => {
+          // S1: aria-label with numeric count (English and Polish variants)
+          let best = 0;
+          document.querySelectorAll('[aria-label]').forEach(el => {
+            const label = el.getAttribute('aria-label') || '';
+            const m = label.match(/(\\d+)\\s+(?:unread|new|nieprzeczytanych|nowych)/i);
+            if (m) {
+              const n = parseInt(m[1], 10);
+              if (n > 0 && n <= 9999) best = Math.max(best, n);
+            }
+          });
+          if (best > 0) return best;
+
+          // S2: class-based with numeric text content
+          document.querySelectorAll('[class*="unread"], [class*="badge"], [class*="count"], [class*="notification"]').forEach(el => {
+            const text = el.textContent.trim();
+            if (/^\\d+$/.test(text)) {
+              const n = parseInt(text, 10);
+              if (n > 0 && n <= 9999) best = Math.max(best, n);
+            }
+          });
+          if (best > 0) return best;
+
+          // S3: data attributes with numeric values
+          document.querySelectorAll('[data-count], [data-unread-count], [data-badge], [data-unread]').forEach(el => {
+            const val = el.getAttribute('data-count') || el.getAttribute('data-unread-count') ||
+                        el.getAttribute('data-badge') || el.getAttribute('data-unread') || '';
+            const n = parseInt(val, 10);
+            if (n > 0 && n <= 9999) best = Math.max(best, n);
+          });
+          if (best > 0) return best;
+
+          // S4: title without parens — catches "3 | Gadu-Gadu" or "3 - Messenger" formats
+          const titleNum = document.title.match(/^(\\d+)[^)]/);
+          if (titleNum) return parseInt(titleNum[1], 10);
+
+          return 0;
         })()
       `).catch(() => 0)
       return typeof result === 'number' ? result : 0
@@ -257,11 +577,8 @@ async function runPeriodicUnreadScrape(): Promise<void> {
     const view = serviceViews.get(service.id)
     if (!view) continue
 
-    // Active service already receives real-time counts via page-title-updated
-    if (service.id === activeServiceId) continue
-
     tasks.push(
-      scrapeUnreadCount(view, service.type).then((count) => {
+      scrapeUnreadCount(view, service.type, serviceUnreads.get(service.id) || 0).then((count) => {
         handleUnreadCountChange(service.id, count)
       })
     )
@@ -283,6 +600,7 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
   const view = new WebContentsView({
     webPreferences: {
       partition: `persist:service-${service.id}`,
+      preload: join(__dirname, '../preload/service-bridge.mjs'),
       sandbox: true,
       backgroundThrottling: false
     }
@@ -376,11 +694,33 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
     }
   })
 
-  // Listen to title changes to parse unread counts
+  // Listen to title changes to parse unread counts.
+  // hadTitleCount tracks whether the previous title carried a "(N)" prefix.
+  // When the title transitions from having a count to NOT having one, that's
+  // the service itself signalling "messages read" — trigger an immediate DOM
+  // scrape rather than waiting for the next periodic cycle (~8 s).
+  let hadTitleCount = false
   view.webContents.on('page-title-updated', (_event, title) => {
     const match = title.match(/\((\d+)\)/)
-    const count = match ? parseInt(match[1], 10) : 0
-    handleUnreadCountChange(serviceId, count)
+    if (match) {
+      hadTitleCount = true
+      handleUnreadCountChange(serviceId, parseInt(match[1], 10))
+    } else if (hadTitleCount) {
+      // Title just lost its count — messages likely read. Scrape after a short
+      // delay so the DOM has time to settle (React re-renders, Messenger transitions).
+      hadTitleCount = false
+      setTimeout(() => {
+        const current = serviceUnreads.get(serviceId) || 0
+        if (current === 0) return
+        scrapeUnreadCount(view, service.type, current).then((count) => {
+          if (count === 0) {
+            // DOM confirms zero — force-clear without waiting for the 2-streak
+            serviceZeroStreak.set(serviceId, 2)
+            handleUnreadCountChange(serviceId, 0)
+          }
+        }).catch(() => {})
+      }, 600)
+    }
   })
 
   // Listen to navigation events to save the last visited URL
@@ -657,6 +997,9 @@ function validateImportedConfig(data: unknown): { valid: boolean; reason?: strin
     if (general.closeToTray !== undefined && typeof general.closeToTray !== 'boolean') {
       return { valid: false, reason: '"general.closeToTray" must be a boolean.' }
     }
+    if (general.showTabLabels !== undefined && typeof general.showTabLabels !== 'boolean') {
+      return { valid: false, reason: '"general.showTabLabels" must be a boolean.' }
+    }
   }
 
   return { valid: true }
@@ -710,6 +1053,7 @@ app.whenReady().then(() => {
           } catch (_) { /* ignore */ }
           serviceViews.delete(prev.id)
           serviceUnreads.delete(prev.id)
+          serviceZeroStreak.delete(prev.id)
         }
       }
     }
@@ -887,6 +1231,35 @@ app.whenReady().then(() => {
     }
   })
 
+  // Fired by service-bridge.ts preload whenever a service fires window.Notification.
+  // (a) Show a native OS toast respecting DND.
+  // (b) Immediately rescrape that service so the badge updates without waiting for the
+  //     8-second polling cycle. Title-based detection means no DOM touching for services
+  //     like Telegram that already put the count in document.title.
+  ipcMain.on('service-notification', (event, { title, body }: { title: string; body: string }) => {
+    // Show native toast
+    if (!dndActive) {
+      try {
+        const notif = new Notification({ title, body, silent: false })
+        notif.on('click', () => { mainWindow?.show(); mainWindow?.focus() })
+        notif.show()
+      } catch {}
+    }
+    // Identify the sending service and rescrape immediately
+    for (const [serviceId, view] of serviceViews) {
+      if (view.webContents.id === event.sender.id) {
+        const services = store.get('services') || []
+        const service = services.find((s) => s.id === serviceId)
+        if (service) {
+          scrapeUnreadCount(view, service.type, serviceUnreads.get(serviceId) || 0).then((count) => {
+            handleUnreadCountChange(serviceId, count)
+          }).catch(() => {})
+        }
+        break
+      }
+    }
+  })
+
   ipcMain.handle('show-native-notification', (_, title: string, body: string) => {
     if (dndActive) return
     try {
@@ -943,7 +1316,11 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('get-general-config', () => {
-    return store.get('general') || { closeToTray: true }
+    const saved = (store.get('general') || {}) as Record<string, unknown>
+    return {
+      closeToTray: saved.closeToTray !== false,
+      showTabLabels: saved.showTabLabels !== false
+    }
   })
 
   ipcMain.handle('set-general-config', (_, config) => {
