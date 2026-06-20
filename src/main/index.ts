@@ -1097,6 +1097,11 @@ app.whenReady().then(() => {
       view.setBounds(contentBounds)
       activeServiceId = id
       serviceLastActive.set(id, Date.now())
+      // Push current loading state immediately — did-start-loading fires at view
+      // creation time (before the renderer listener is ready), so the renderer
+      // would otherwise never know the view was loading when the tab is first clicked.
+      const loading = !view.webContents.isDestroyed() && view.webContents.isLoading()
+      mainWindow.webContents.send('service-loading', { serviceId: id, loading })
     }
   })
 
