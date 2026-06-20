@@ -764,6 +764,18 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
     });
   }
 
+  // Send loading state to renderer when page loading starts/stops
+  view.webContents.on('did-start-loading', () => {
+    if (mainWindow) {
+      mainWindow.webContents.send('service-loading', { serviceId, loading: true })
+    }
+  })
+  view.webContents.on('did-stop-loading', () => {
+    if (mainWindow) {
+      mainWindow.webContents.send('service-loading', { serviceId, loading: false })
+    }
+  })
+
   // Apply initial mute state based on DND or per-service settings
   const isMuted = dndActive || !!service.muted
   console.log(`[Main] getOrCreateView: Service ${serviceId} setAudioMuted(${isMuted}). dndActive=${dndActive}, service.muted=${service.muted}`)
@@ -1319,7 +1331,8 @@ app.whenReady().then(() => {
     const saved = (store.get('general') || {}) as Record<string, unknown>
     return {
       closeToTray: saved.closeToTray !== false,
-      showTabLabels: saved.showTabLabels !== false
+      showTabLabels: saved.showTabLabels !== false,
+      showLoadingBar: saved.showLoadingBar !== false
     }
   })
 

@@ -39,6 +39,7 @@ export interface AppConfig {
   }
   general: {
     closeToTray: boolean;
+    showLoadingBar?: boolean;
   }
 }
 
@@ -119,7 +120,8 @@ export function initStore(userDataPath: string): void {
         endTime: '08:00'
       },
       general: {
-        closeToTray: true
+        closeToTray: true,
+        showLoadingBar: true
       }
     }
   })
