@@ -60,6 +60,8 @@ let saveTimeout: NodeJS.Timeout | null = null
 let cloudSyncTimeout: NodeJS.Timeout | null = null
 
 const serviceViews = new Map<string, WebContentsViewType>()
+// Tracks the last URL the user navigated to within each service (in-memory only, not persisted).
+const lastVisitedUrls = new Map<string, string>()
 // Tracks when each service was last viewed (ms). Used to throttle inactive renderers.
 const serviceLastActive = new Map<string, number>()
 const serviceUnreads = new Map<string, number>()
@@ -154,9 +156,8 @@ function getServiceDomains(type: string): string[] {
 function saveLastVisitedUrl(serviceId: string, url: string): void {
   try {
     const services = store.get('services') || []
-    const serviceIndex = services.findIndex((s) => s.id === serviceId)
-    if (serviceIndex === -1) return
-    const service = services[serviceIndex]
+    const service = services.find((s) => s.id === serviceId)
+    if (!service) return
 
     const parsed = new URL(url)
     const hostname = parsed.hostname
@@ -165,14 +166,7 @@ function saveLastVisitedUrl(serviceId: string, url: string): void {
     const isAllowed = allowedDomains.some((d) => hostname === d || hostname.endsWith('.' + d))
     if (!isAllowed) return
 
-    if (service.url !== url) {
-      service.url = url
-      services[serviceIndex] = service
-      store.set('services', services)
-      if (mainWindow) {
-        mainWindow.webContents.send('services-updated', services)
-      }
-    }
+    lastVisitedUrls.set(serviceId, url)
   } catch (error) {
     console.error(`Failed to save last visited URL for service ${serviceId}:`, error)
   }
@@ -781,7 +775,8 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
   console.log(`[Main] getOrCreateView: Service ${serviceId} setAudioMuted(${isMuted}). dndActive=${dndActive}, service.muted=${service.muted}`)
   view.webContents.setAudioMuted(isMuted)
 
-  view.webContents.loadURL(service.url)
+  const homeUrl = defaultServices.find((s) => s.id === serviceId)?.url ?? service.url
+  view.webContents.loadURL(homeUrl).catch(console.error)
   serviceViews.set(serviceId, view)
   serviceLastActive.set(serviceId, Date.now())
   return view
