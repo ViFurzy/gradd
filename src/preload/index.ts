@@ -30,9 +30,6 @@ const api = {
   onServicesUpdated: (callback: (services: any[]) => void): void => {
     ipcRenderer.on('services-updated', (_event, services) => callback(services))
   },
-  onServiceLoading: (callback: (data: { serviceId: string; loading: boolean }) => void): void => {
-    ipcRenderer.on('service-loading', (_event, data) => callback(data))
-  },
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
   loginGoogle: (): Promise<{ success: boolean; uid?: string; error?: string }> => ipcRenderer.invoke('login-google'),
   logoutGoogle: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('logout-google'),

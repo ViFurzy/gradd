@@ -44,9 +44,6 @@ function App(): React.JSX.Element {
   } = useLayoutStore()
   const [hoveredToggle, setHoveredToggle] = useState(false)
   const [draggedServiceId, setDraggedServiceId] = useState<string | null>(null)
-  const [loadingServices, setLoadingServices] = useState<Set<string>>(new Set())
-  const [revealKey, setRevealKey] = useState(0)
-  const prevServiceIdRef = useRef<string | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -86,31 +83,6 @@ function App(): React.JSX.Element {
       setDndActiveState(active)
     })
   }, [setDndActiveState])
-
-  // Listen for service loading state changes from Electron main process
-  useEffect(() => {
-    window.api.onServiceLoading((data) => {
-      setLoadingServices((prev) => {
-        const next = new Set(prev)
-        if (data.loading) {
-          next.add(data.serviceId)
-        } else {
-          next.delete(data.serviceId)
-        }
-        return next
-      })
-    })
-  }, [])
-
-  // Trigger tab-switch reveal animation when switching to an already-loaded service
-  useEffect(() => {
-    const prev = prevServiceIdRef.current
-    prevServiceIdRef.current = activeServiceId
-    if (!activeServiceId || prev === null || prev === activeServiceId) return
-    if (!loadingServices.has(activeServiceId)) {
-      setRevealKey((k) => k + 1)
-    }
-  }, [activeServiceId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for services list updates from Electron main process (e.g. from context menus)
   useEffect(() => {
@@ -416,12 +388,6 @@ function App(): React.JSX.Element {
               ref={contentRef}
               className="relative flex-1 h-full bg-transparent flex flex-col items-center justify-start overflow-hidden content-area"
             >
-              {activePanel === 'service' && activeServiceId && loadingServices.has(activeServiceId) && (
-                <LoadingOverlay />
-              )}
-              {activePanel === 'service' && activeServiceId && !loadingServices.has(activeServiceId) && revealKey > 0 && generalConfig?.showLoadingBar !== false && (
-                <TabSwitchReveal key={revealKey} />
-              )}
               {activePanel === 'directory' ? <DirectoryDashboard /> : null}
               {activePanel === 'settings' ? <SettingsPanel onLogout={handleLogout} /> : null}
             </main>
@@ -563,12 +529,6 @@ function App(): React.JSX.Element {
               ref={contentRef}
               className="relative flex-1 h-full bg-transparent flex flex-col items-center justify-start overflow-hidden content-area"
             >
-              {activePanel === 'service' && activeServiceId && loadingServices.has(activeServiceId) && (
-                <LoadingOverlay />
-              )}
-              {activePanel === 'service' && activeServiceId && !loadingServices.has(activeServiceId) && revealKey > 0 && generalConfig?.showLoadingBar !== false && (
-                <TabSwitchReveal key={revealKey} />
-              )}
               {activePanel === 'directory' ? <DirectoryDashboard /> : null}
               {activePanel === 'settings' ? <SettingsPanel onLogout={handleLogout} /> : null}
             </main>
@@ -577,45 +537,6 @@ function App(): React.JSX.Element {
       </div>
     </div>
   )
-}
-
-function LoadingOverlay(): React.JSX.Element {
-  return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-dominant">
-      <div className="relative w-16 h-16 flex items-center justify-center">
-        <div className="absolute inset-0 rounded-full border-2 border-surface-border border-t-accent loading-ring" />
-        <img src={logoImg} className="w-9 h-9 object-contain select-none pointer-events-none" alt="" />
-      </div>
-      <style>{`
-        @keyframes loading-ring-spin {
-          to { transform: rotate(360deg); }
-        }
-        .loading-ring {
-          animation: loading-ring-spin 1.2s linear infinite;
-        }
-      `}</style>
-    </div>
-  )
-}
-
-function TabSwitchReveal(): React.JSX.Element | null {
-  const [mounted, setMounted] = React.useState(true)
-  return mounted ? (
-    <div
-      className="absolute inset-0 z-40 bg-dominant pointer-events-none tab-switch-reveal"
-      onAnimationEnd={() => setMounted(false)}
-    >
-      <style>{`
-        @keyframes tab-rollup {
-          0%   { transform: translateY(0);     opacity: 1; }
-          100% { transform: translateY(-100%); opacity: 0.6; }
-        }
-        .tab-switch-reveal {
-          animation: tab-rollup 320ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
-        }
-      `}</style>
-    </div>
-  ) : null
 }
 
 function DirectoryDashboard(): React.JSX.Element {
@@ -917,26 +838,25 @@ function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Elemen
             </button>
           </div>
 
-          {/* Tab Switch Animation Toggle */}
+          {/* Start with Windows Toggle */}
           <div className="flex items-center justify-between border-t border-surface-border/50 pt-4 mt-1">
             <div>
               <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">
-                Animate tab switching
+                Start with Windows
               </h3>
               <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
-                When enabled, a smooth rollup animation plays when switching between services.
-                The initial loading screen always shows regardless of this setting.
+                When enabled, Gradd launches automatically when you log in to Windows.
               </p>
             </div>
             <button
-              onClick={() => updateGeneralConfig({ showLoadingBar: generalConfig?.showLoadingBar === false })}
+              onClick={() => updateGeneralConfig({ startWithWindows: !generalConfig?.startWithWindows })}
               className={`no-drag relative w-10 h-6 rounded-full transition-colors duration-150 cursor-pointer focus:outline-none ${
-                generalConfig?.showLoadingBar !== false ? 'bg-accent' : 'bg-dominant border border-surface-border'
+                generalConfig?.startWithWindows ? 'bg-accent' : 'bg-dominant border border-surface-border'
               }`}
             >
               <div
                 className={`absolute top-[3px] left-[3px] w-4.5 h-4.5 rounded-full bg-text-primary shadow transform transition-transform duration-150 ${
-                  generalConfig?.showLoadingBar !== false ? 'translate-x-4' : 'translate-x-0'
+                  generalConfig?.startWithWindows ? 'translate-x-4' : 'translate-x-0'
                 }`}
               />
             </button>

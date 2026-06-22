@@ -681,7 +681,7 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
     return { action: 'deny' }
   })
 
-  // Prevent internal navigation to non-web protocol deep links
+  // Prevent navigation to non-web protocol deep links
   view.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith('http:') && !url.startsWith('https:')) {
       event.preventDefault()
@@ -757,18 +757,6 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
       `).catch(() => {});
     });
   }
-
-  // Send loading state to renderer when page loading starts/stops
-  view.webContents.on('did-start-loading', () => {
-    if (mainWindow) {
-      mainWindow.webContents.send('service-loading', { serviceId, loading: true })
-    }
-  })
-  view.webContents.on('did-stop-loading', () => {
-    if (mainWindow) {
-      mainWindow.webContents.send('service-loading', { serviceId, loading: false })
-    }
-  })
 
   // Apply initial mute state based on DND or per-service settings
   const isMuted = dndActive || !!service.muted
@@ -1101,11 +1089,6 @@ app.whenReady().then(() => {
       view.setBounds(contentBounds)
       activeServiceId = id
       serviceLastActive.set(id, Date.now())
-      // Push current loading state immediately — did-start-loading fires at view
-      // creation time (before the renderer listener is ready), so the renderer
-      // would otherwise never know the view was loading when the tab is first clicked.
-      const loading = !view.webContents.isDestroyed() && view.webContents.isLoading()
-      mainWindow.webContents.send('service-loading', { serviceId: id, loading })
     }
   })
 
@@ -1153,8 +1136,9 @@ app.whenReady().then(() => {
         label: 'Refresh',
         click: () => {
           const view = serviceViews.get(id)
-          if (view) {
-            view.webContents.reload()
+          const defaultService = defaultServices.find((s) => s.id === id)
+          if (view && defaultService) {
+            view.webContents.loadURL(defaultService.url).catch(console.error)
           }
         }
       },
@@ -1341,14 +1325,16 @@ app.whenReady().then(() => {
     return {
       closeToTray: saved.closeToTray !== false,
       showTabLabels: saved.showTabLabels !== false,
-      showLoadingBar: saved.showLoadingBar !== false
+      startWithWindows: app.getLoginItemSettings().openAtLogin
     }
   })
 
   ipcMain.handle('set-general-config', (_, config) => {
-    store.set('general', config)
-    // Cloud sync syncs the whole config, but for simplicity we only push layout/dnd/services currently.
-    // If we want to sync general, we'd add it to pushConfigToCloud. Not strictly required for now.
+    const { startWithWindows, ...storeConfig } = config as Record<string, unknown>
+    store.set('general', storeConfig)
+    if (typeof startWithWindows === 'boolean') {
+      app.setLoginItemSettings({ openAtLogin: startWithWindows })
+    }
     return true
   })
 

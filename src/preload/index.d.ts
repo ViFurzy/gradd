@@ -28,13 +28,12 @@ export interface GraddAPI {
   doubleClickHeader(): Promise<void>
   onDndStatusChanged(callback: (active: boolean) => void): void
   onServicesUpdated(callback: (services: ServiceConfig[]) => void): void
-  onServiceLoading(callback: (data: { serviceId: string; loading: boolean }) => void): void
   getAppVersion(): Promise<string>
   loginGoogle(): Promise<{ success: boolean; uid?: string; error?: string; photoURL?: string }>
   logoutGoogle(): Promise<{ success: boolean; error?: string }>
   getAuthStatus(): Promise<{ loggedIn: boolean; uid?: string; photoURL?: string }>
-  getGeneralConfig(): Promise<{ closeToTray: boolean; showTabLabels: boolean; showLoadingBar: boolean }>
-  setGeneralConfig(config: { closeToTray: boolean; showTabLabels: boolean; showLoadingBar: boolean }): Promise<void>
+  getGeneralConfig(): Promise<{ closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean }>
+  setGeneralConfig(config: { closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean }): Promise<void>
   exportConfig(): Promise<{ success: boolean; error?: string }>
   importConfig(): Promise<{ success: boolean; error?: string }>
   clearConfig(): Promise<void>

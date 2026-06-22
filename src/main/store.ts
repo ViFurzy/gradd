@@ -39,7 +39,6 @@ export interface AppConfig {
   }
   general: {
     closeToTray: boolean;
-    showLoadingBar?: boolean;
   }
 }
 
@@ -120,13 +119,12 @@ export function initStore(userDataPath: string): void {
         endTime: '08:00'
       },
       general: {
-        closeToTray: true,
-        showLoadingBar: true
+        closeToTray: true
       }
     }
   })
 
-  // Migration: fix 'Instagram Direct' naming
+  // Migrations
   const existingServices = store.get('services')
   if (existingServices && Array.isArray(existingServices)) {
     let changed = false
