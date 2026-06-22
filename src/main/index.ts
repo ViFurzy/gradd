@@ -1,6 +1,6 @@
 import electron from 'electron'
 import type { BrowserWindow as BrowserWindowType, Tray as TrayType, WebContentsView as WebContentsViewType } from 'electron'
-const { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, WebContentsView, session, Notification, dialog } = electron
+const { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, WebContentsView, session, Notification, dialog, clipboard } = electron
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { readFileSync, writeFileSync } from 'fs'
@@ -681,9 +681,25 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
     return { action: 'deny' }
   })
 
-  // Prevent navigation to non-web protocol deep links
+  // Prevent navigation to non-web protocol deep links; redirect off-domain URLs to system browser
   view.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith('http:') && !url.startsWith('https:')) {
+      event.preventDefault()
+      return
+    }
+    try {
+      const { hostname } = new URL(url)
+      const allowedDomains = getServiceDomains(service.type)
+      if (allowedDomains.length > 0) {
+        const isAllowed = allowedDomains.some(
+          (d) => hostname === d || hostname.endsWith('.' + d)
+        )
+        if (!isAllowed) {
+          event.preventDefault()
+          shell.openExternal(url).catch((err) => console.error('Failed to open external URL:', err))
+        }
+      }
+    } catch {
       event.preventDefault()
     }
   })
@@ -723,6 +739,58 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
   })
   view.webContents.on('did-navigate-in-page', (_event, url) => {
     saveLastVisitedUrl(serviceId, url)
+  })
+
+  // Auto-recover crashed/gray WebContentsViews
+  view.webContents.on('render-process-gone', (_event, details) => {
+    console.warn(`[Main] Renderer process gone for service ${serviceId} (reason: ${details.reason}). Reloading...`)
+    setTimeout(() => {
+      if (!view.webContents.isDestroyed()) {
+        view.webContents.reload()
+      }
+    }, 500)
+  })
+
+  // Right-click context menu for Back/Forward/Reload/edit actions/link actions
+  view.webContents.on('context-menu', (_event, params) => {
+    const template: Electron.MenuItemConstructorOptions[] = [
+      {
+        label: 'Back',
+        enabled: params.isEditable ? false : view.webContents.canGoBack(),
+        click: () => view.webContents.goBack()
+      },
+      {
+        label: 'Forward',
+        enabled: params.isEditable ? false : view.webContents.canGoForward(),
+        click: () => view.webContents.goForward()
+      },
+      {
+        label: 'Reload',
+        click: () => view.webContents.reload()
+      },
+      { type: 'separator' },
+      { label: 'Cut',        role: 'cut',       enabled: params.editFlags.canCut },
+      { label: 'Copy',       role: 'copy',      enabled: params.editFlags.canCopy },
+      { label: 'Paste',      role: 'paste',     enabled: params.editFlags.canPaste },
+      { label: 'Select All', role: 'selectAll', enabled: params.editFlags.canSelectAll }
+    ]
+
+    if (params.linkURL) {
+      template.push(
+        { type: 'separator' },
+        {
+          label: 'Copy Link',
+          click: () => clipboard.writeText(params.linkURL)
+        },
+        {
+          label: 'Open Link in Browser',
+          click: () => shell.openExternal(params.linkURL).catch((err) => console.error('Failed to open link:', err))
+        }
+      )
+    }
+
+    const menu = Menu.buildFromTemplate(template)
+    if (mainWindow) menu.popup({ window: mainWindow })
   })
 
   // Telegram: fix scroll-up after sending a message.
@@ -1133,11 +1201,20 @@ app.whenReady().then(() => {
 
     const menu = Menu.buildFromTemplate([
       {
-        label: 'Refresh',
+        label: 'Reload',
+        click: () => {
+          const view = serviceViews.get(id)
+          if (view && !view.webContents.isDestroyed()) {
+            view.webContents.reload()
+          }
+        }
+      },
+      {
+        label: 'Go to Home',
         click: () => {
           const view = serviceViews.get(id)
           const defaultService = defaultServices.find((s) => s.id === id)
-          if (view && defaultService) {
+          if (view && defaultService && !view.webContents.isDestroyed()) {
             view.webContents.loadURL(defaultService.url).catch(console.error)
           }
         }
