@@ -1210,7 +1210,7 @@ app.whenReady().then(() => {
         }
       },
       {
-        label: 'Go to Home',
+        label: 'Refresh',
         click: () => {
           const view = serviceViews.get(id)
           const defaultService = defaultServices.find((s) => s.id === id)
