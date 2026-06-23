@@ -11,6 +11,37 @@ const interceptScript = `
 (function() {
   if (window.__graddBridge) return;
   window.__graddBridge = true;
+
+  // Strip USB transport from WebAuthn requests to suppress the Windows security key dialog.
+  // Meta's login page requests USB authenticators; without this, Windows shows a native prompt
+  // asking users to insert a USB key even when they don't have one.
+  if (navigator.credentials && navigator.credentials.get) {
+    var _origCredGet = navigator.credentials.get.bind(navigator.credentials);
+    navigator.credentials.get = function(options) {
+      if (options && options.publicKey) {
+        if (options.publicKey.allowCredentials) {
+          options.publicKey.allowCredentials = options.publicKey.allowCredentials.map(function(cred) {
+            if (cred.transports) {
+              return Object.assign({}, cred, {
+                transports: cred.transports.filter(function(t) { return t !== 'usb'; })
+              });
+            }
+            return cred;
+          });
+        }
+        if (options.publicKey.authenticatorSelection &&
+            options.publicKey.authenticatorSelection.authenticatorAttachment === 'cross-platform') {
+          var sel = Object.assign({}, options.publicKey.authenticatorSelection);
+          delete sel.authenticatorAttachment;
+          options = Object.assign({}, options, {
+            publicKey: Object.assign({}, options.publicKey, { authenticatorSelection: sel })
+          });
+        }
+      }
+      return _origCredGet(options);
+    };
+  }
+
   var _Orig = window.Notification;
   if (!_Orig) return;
   function GraddNotif(title, opts) {
