@@ -22,8 +22,7 @@
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux",
     "test:e2e": "playwright test",
-    "test:unit": "vitest run",
-    "release": "node scripts/release.mjs"
+    "test:unit": "vitest run"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
