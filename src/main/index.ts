@@ -826,6 +826,38 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
     });
   }
 
+  // Suppress the Windows USB security key dialog on any service that triggers WebAuthn.
+  // The preload script-tag injection is blocked by strict CSP on pages like accounts.meta.com;
+  // executeJavaScript() runs in the page's main world and bypasses CSP entirely.
+  view.webContents.on('did-finish-load', () => {
+    view.webContents.executeJavaScript(`
+      (function() {
+        if (window.__graddNoUsbKey) return;
+        window.__graddNoUsbKey = true;
+        var creds = navigator.credentials;
+        if (!creds || !creds.get) return;
+        var orig = creds.get.bind(creds);
+        creds.get = function(opts) {
+          if (opts && opts.publicKey) {
+            var pk = opts.publicKey;
+            if (pk.allowCredentials && pk.allowCredentials.length > 0) {
+              pk.allowCredentials = pk.allowCredentials.map(function(c) {
+                if (!c.transports) return c;
+                var t = c.transports.filter(function(x) { return x !== 'usb'; });
+                return { id: c.id, type: c.type, transports: t };
+              });
+            } else {
+              // Discoverable-credential (passkey) flow with no specific credentials listed —
+              // reject immediately so Windows never invokes its native authenticator dialog.
+              return Promise.reject(new DOMException('NotAllowedError', 'NotAllowedError'));
+            }
+          }
+          return orig(opts);
+        };
+      })();
+    `).catch(() => {});
+  });
+
   // Apply initial mute state based on DND or per-service settings
   const isMuted = dndActive || !!service.muted
   console.log(`[Main] getOrCreateView: Service ${serviceId} setAudioMuted(${isMuted}). dndActive=${dndActive}, service.muted=${service.muted}`)
