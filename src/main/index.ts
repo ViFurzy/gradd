@@ -58,6 +58,9 @@ let tray: TrayType | null = null
 let isQuitting = false
 let saveTimeout: NodeJS.Timeout | null = null
 let cloudSyncTimeout: NodeJS.Timeout | null = null
+// Timestamp (ms) when the window was last hidden to the system tray.
+// Used to detect service views that went stale while the app was backgrounded.
+let windowHiddenAt: number | null = null
 
 const serviceViews = new Map<string, WebContentsViewType>()
 // Tracks the last URL the user navigated to within each service (in-memory only, not persisted).
@@ -1016,6 +1019,43 @@ function createWindow(): void {
   // Dynamic Tray Menu Labels
   mainWindow.on('show', updateTrayMenu)
   mainWindow.on('hide', updateTrayMenu)
+
+  // Track hide/show transitions to detect and reload stale service views.
+  // When the window is hidden to the tray, record the time. When it is shown
+  // again, any service view whose last-active timestamp predates the hide time
+  // has been backgrounded the entire tray session — reload it via loadURL so
+  // that SPAs (especially Telegram Web) get a full navigation restart rather
+  // than attempting to resume from a potentially blank/suspended renderer state.
+  mainWindow.on('hide', () => {
+    windowHiddenAt = Date.now()
+  })
+
+  mainWindow.on('show', () => {
+    if (windowHiddenAt === null) return
+    const hiddenAt = windowHiddenAt
+    windowHiddenAt = null
+
+    const services = store.get('services') || []
+    for (const [serviceId, view] of serviceViews) {
+      const lastActive = serviceLastActive.get(serviceId) ?? 0
+      if (lastActive < hiddenAt) {
+        // This view has not been touched since before we hid — reload it
+        const service = services.find((s) => s.id === serviceId)
+        if (!service) continue
+        const homeUrl = defaultServices.find((s) => s.id === serviceId)?.url ?? service.url
+        try {
+          if (!view.webContents.isDestroyed()) {
+            console.log(`[Main] Reloading stale service view '${serviceId}' after tray restore (last active: ${new Date(lastActive).toISOString()})`)
+            view.webContents.loadURL(homeUrl).catch((err) => {
+              console.error(`[Main] Failed to reload stale view for service ${serviceId}:`, err)
+            })
+          }
+        } catch (err) {
+          console.error(`[Main] Error reloading stale view for service ${serviceId}:`, err)
+        }
+      }
+    }
+  })
 }
 
 function createTray(): void {
