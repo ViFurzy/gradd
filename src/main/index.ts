@@ -585,6 +585,32 @@ async function runPeriodicUnreadScrape(): Promise<void> {
   await Promise.allSettled(tasks)
 }
 
+function recreateServiceView(serviceId: string): void {
+  if (!mainWindow) return
+  const existingView = serviceViews.get(serviceId)
+  if (!existingView) return
+
+  const wasActive = serviceId === activeServiceId
+
+  try {
+    if (!existingView.webContents.isDestroyed()) {
+      mainWindow.contentView.removeChildView(existingView)
+      ;(existingView.webContents as any).destroy()
+    }
+  } catch (_) { /* ignore */ }
+  serviceViews.delete(serviceId)
+  serviceLastActive.delete(serviceId)
+  serviceUnreads.delete(serviceId)
+  serviceZeroStreak.delete(serviceId)
+
+  const newView = getOrCreateView(serviceId)
+  if (newView && wasActive) {
+    mainWindow.contentView.addChildView(newView)
+    newView.setBounds(contentBounds)
+    newView.webContents.setBackgroundThrottling(false)
+  }
+}
+
 function getOrCreateView(serviceId: string): WebContentsViewType | null {
   if (serviceViews.has(serviceId)) {
     return serviceViews.get(serviceId)!
@@ -744,12 +770,14 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
     saveLastVisitedUrl(serviceId, url)
   })
 
-  // Auto-recover crashed/gray WebContentsViews
+  // Auto-recover crashed WebContentsViews by full recreation (reload/loadURL alone
+  // cannot recover a crashed renderer — the view must be destroyed and recreated).
   view.webContents.on('render-process-gone', (_event, details) => {
-    console.warn(`[Main] Renderer process gone for service ${serviceId} (reason: ${details.reason}). Reloading...`)
+    console.warn(`[Main] Renderer process gone for service ${serviceId} (reason: ${details.reason}). Recreating view...`)
     setTimeout(() => {
-      if (!view.webContents.isDestroyed()) {
-        view.webContents.reload()
+      // Guard: only recreate if this view is still the one in the map (not already replaced)
+      if (serviceViews.get(serviceId) === view) {
+        recreateServiceView(serviceId)
       }
     }, 500)
   })
@@ -1035,24 +1063,14 @@ function createWindow(): void {
     const hiddenAt = windowHiddenAt
     windowHiddenAt = null
 
-    const services = store.get('services') || []
-    for (const [serviceId, view] of serviceViews) {
+    // Recreate any service view that went stale while the window was hidden.
+    // loadURL alone cannot recover a crashed renderer — full recreation is required.
+    // Snapshot keys first to avoid mutating the map while iterating.
+    for (const serviceId of [...serviceViews.keys()]) {
       const lastActive = serviceLastActive.get(serviceId) ?? 0
       if (lastActive < hiddenAt) {
-        // This view has not been touched since before we hid — reload it
-        const service = services.find((s) => s.id === serviceId)
-        if (!service) continue
-        const homeUrl = defaultServices.find((s) => s.id === serviceId)?.url ?? service.url
-        try {
-          if (!view.webContents.isDestroyed()) {
-            console.log(`[Main] Reloading stale service view '${serviceId}' after tray restore (last active: ${new Date(lastActive).toISOString()})`)
-            view.webContents.loadURL(homeUrl).catch((err) => {
-              console.error(`[Main] Failed to reload stale view for service ${serviceId}:`, err)
-            })
-          }
-        } catch (err) {
-          console.error(`[Main] Error reloading stale view for service ${serviceId}:`, err)
-        }
+        console.log(`[Main] Recreating stale service view '${serviceId}' after tray restore (last active: ${new Date(lastActive).toISOString()})`)
+        recreateServiceView(serviceId)
       }
     }
   })
