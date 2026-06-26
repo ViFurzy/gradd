@@ -1227,10 +1227,10 @@ app.whenReady().then(() => {
     if (activeServiceId && mainWindow) {
       const activeView = serviceViews.get(activeServiceId)
       if (activeView) {
-        mainWindow.contentView.removeChildView(activeView)
-        // Put the outgoing service into throttled mode — WebSocket stays alive for
-        // notifications, but Chromium can aggressively GC its V8 heap.
-        activeView.webContents.setBackgroundThrottling(true)
+        // Move off-screen rather than removeChildView — keeps visibilityState = 'visible'
+        // inside the embedded page so SPAs (especially Telegram Web) don't suspend their
+        // rendering layer and go blank when the tab is deselected.
+        activeView.setBounds({ x: -10000, y: -10000, width: contentBounds.width || 1280, height: contentBounds.height || 800 })
       }
     }
 
@@ -1241,9 +1241,10 @@ app.whenReady().then(() => {
 
     const view = getOrCreateView(id)
     if (view && mainWindow) {
-      // Restore full performance for the service the user is actively viewing
-      view.webContents.setBackgroundThrottling(false)
-      mainWindow.contentView.addChildView(view)
+      // Only add to contentView on first selection; after that it stays in the hierarchy
+      if (!mainWindow.contentView.children.includes(view)) {
+        mainWindow.contentView.addChildView(view)
+      }
       view.setBounds(contentBounds)
       activeServiceId = id
       serviceLastActive.set(id, Date.now())
