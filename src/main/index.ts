@@ -170,6 +170,8 @@ function saveLastVisitedUrl(serviceId: string, url: string): void {
     if (!isAllowed) return
 
     lastVisitedUrls.set(serviceId, url)
+    const existing = store.get('lastVisited') || {}
+    store.set('lastVisited', { ...existing, [serviceId]: url })
   } catch (error) {
     console.error(`Failed to save last visited URL for service ${serviceId}:`, error)
   }
@@ -921,7 +923,8 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
   console.log(`[Main] getOrCreateView: Service ${serviceId} setAudioMuted(${isMuted}). dndActive=${dndActive}, service.muted=${service.muted}`)
   view.webContents.setAudioMuted(isMuted)
 
-  const homeUrl = defaultServices.find((s) => s.id === serviceId)?.url ?? service.url
+  const lastVisited = store.get('lastVisited') || {}
+  const homeUrl = lastVisited[serviceId] ?? defaultServices.find((s) => s.id === serviceId)?.url ?? service.url
   view.webContents.loadURL(homeUrl).catch(console.error)
   serviceViews.set(serviceId, view)
   serviceLastActive.set(serviceId, Date.now())

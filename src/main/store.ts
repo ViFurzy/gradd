@@ -41,6 +41,7 @@ export interface AppConfig {
     closeToTray: boolean;
     appLockPin?: string;
   }
+  lastVisited?: Record<string, string>
 }
 
 export const defaultServices: ServiceConfig[] = [
