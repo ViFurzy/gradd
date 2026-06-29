@@ -151,6 +151,10 @@ function getServiceDomains(type: string): string[] {
       return ['instagram.com']
     case 'gadugadu':
       return ['gg.pl']
+    case 'linkedin':
+      return ['linkedin.com']
+    case 'teams':
+      return ['teams.microsoft.com', 'microsoft.com', 'microsoftonline.com', 'login.windows.net']
     default:
       return []
   }
@@ -613,6 +617,36 @@ function recreateServiceView(serviceId: string): void {
   }
 }
 
+const CHROME_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
+
+// Opens an in-partition BrowserWindow for OAuth flows that are blocked in embedded WebContentsView.
+// Google and others check the UA / renderer context and reject the embedded origin.
+// A standalone BrowserWindow with a clean Chrome UA passes those checks while the shared
+// partition means the resulting session cookies are immediately visible to the service view.
+function openOAuthPopup(url: string, serviceId: string, serviceDomains: string[]): void {
+  const popup = new BrowserWindow({
+    width: 600,
+    height: 700,
+    autoHideMenuBar: true,
+    webPreferences: { partition: `persist:service-${serviceId}`, sandbox: false }
+  })
+  popup.webContents.setUserAgent(CHROME_UA)
+  popup.loadURL(url).catch((err) => console.error('[OAuth popup] Failed to load:', err))
+  popup.webContents.on('did-navigate', (_e, navUrl) => {
+    try {
+      const { hostname } = new URL(navUrl)
+      if (serviceDomains.some((d) => hostname === d || hostname.endsWith('.' + d))) {
+        popup.close()
+        const view = serviceViews.get(serviceId)
+        if (view && !view.webContents.isDestroyed()) {
+          view.webContents.reload()
+        }
+      }
+    } catch {}
+  })
+}
+
 function getOrCreateView(serviceId: string): WebContentsViewType | null {
   if (serviceViews.has(serviceId)) {
     return serviceViews.get(serviceId)!
@@ -632,15 +666,13 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
   })
 
   // Override User-Agent to avoid browser check rejections
-  if (service.type === 'whatsapp' || service.type === 'instagram' || service.type === 'slack') {
-    const chromeUA =
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
-    view.webContents.setUserAgent(chromeUA)
+  if (service.type === 'whatsapp' || service.type === 'instagram' || service.type === 'slack' || service.type === 'teams') {
+    view.webContents.setUserAgent(CHROME_UA)
   }
 
-  // Handle popups (like Google/Slack OAuth login) in the correct partition
+  // Handle popups and link clicks from embedded service views
   view.webContents.setWindowOpenHandler((details) => {
-    const url = details.url
+    const { url, disposition } = details
 
     // Deny deep links that would launch other local desktop applications
     if (url.startsWith('slack://') || url.startsWith('whatsapp://') || url.startsWith('tg://')) {
@@ -651,88 +683,100 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
       const parsedUrl = new URL(url)
       const hostname = parsedUrl.hostname
 
-      // Slack: workspace/app URLs load in the main view; external IdP (JumpCloud, Okta, etc.) open as in-partition popup
+      // Slack: workspace/app URLs → main view; link clicks → browser; auth popups (new-window) → in-partition
       if (service.type === 'slack') {
         if (hostname === 'slack.com' || hostname.endsWith('.slack.com')) {
           view.webContents.loadURL(url).catch((err) => console.error('Failed to load Slack URL in view:', err))
           return { action: 'deny' }
         }
-        // External SSO provider — open as in-partition popup so auth cookies are shared
+        if (disposition === 'foreground-tab' || disposition === 'background-tab') {
+          shell.openExternal(url).catch((err) => console.error('Failed to open external URL:', err))
+          return { action: 'deny' }
+        }
+        // new-window = programmatic auth popup (JumpCloud, Okta, Azure AD, etc.)
         return {
           action: 'allow',
           overrideBrowserWindowOptions: {
             autoHideMenuBar: true,
-            webPreferences: {
-              partition: `persist:service-${service.id}`,
-              sandbox: false
-            }
+            webPreferences: { partition: `persist:service-${service.id}`, sandbox: false }
           }
         }
       }
 
-      // General service domain routing: load service's own domains directly in the parent view
+      // Service domain routing: load own-domain URLs in the parent view
       const serviceDomains: Record<string, string[]> = {
         whatsapp: ['whatsapp.com', 'whatsapp.net'],
         telegram: ['telegram.org', 'telegram.me', 't.me'],
         messenger: ['messenger.com', 'facebook.com']
       }
-
       const domains = serviceDomains[service.type]
       if (domains && domains.some((d) => hostname === d || hostname.endsWith('.' + d))) {
         view.webContents.loadURL(url).catch((err) => console.error('Failed to load service URL in view:', err))
         return { action: 'deny' }
       }
+
+      // Link clicks (target="_blank" etc.) always go to the browser
+      if (disposition === 'foreground-tab' || disposition === 'background-tab') {
+        shell.openExternal(url).catch((err) => console.error('Failed to open external URL:', err))
+        return { action: 'deny' }
+      }
+
+      // Remaining new-window calls: only allow in-partition for known SSO/OAuth providers
+      const isSSOProvider =
+        hostname === 'accounts.google.com' || hostname.endsWith('.accounts.google.com') ||
+        hostname === 'login.microsoftonline.com' || hostname.endsWith('.login.microsoftonline.com') ||
+        hostname === 'okta.com' || hostname.endsWith('.okta.com') ||
+        hostname === 'appleid.apple.com' ||
+        hostname === 'github.com'
+
+      if (isSSOProvider) {
+        return {
+          action: 'allow',
+          overrideBrowserWindowOptions: {
+            autoHideMenuBar: true,
+            webPreferences: { partition: `persist:service-${service.id}`, sandbox: false }
+          }
+        }
+      }
     } catch (e) {
       console.error('Failed to parse window-open URL:', e)
     }
 
-    // Allow OAuth/SSO or service-related domains in the same partition
-    const isAuthOrService =
-      url.includes('slack.com') ||
-      url.includes('accounts.google.com') ||
-      url.includes('login.microsoftonline.com') ||
-      url.includes('github.com') ||
-      url.includes('facebook.com') ||
-      url.includes('messenger.com') ||
-      url.includes('whatsapp.com') ||
-      url.includes('telegram.org') ||
-      url.includes('okta.com') ||
-      url.includes('appleid.apple.com')
-
-    if (isAuthOrService) {
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          autoHideMenuBar: true,
-          webPreferences: {
-            partition: `persist:service-${service.id}`,
-            sandbox: false
-          }
-        }
-      }
-    }
-
-    // Open any other external links in the default system browser
+    // Everything else → system browser
     shell.openExternal(url).catch((err) => console.error('Failed to open external URL:', err))
     return { action: 'deny' }
   })
 
-  // When a Slack SSO popup completes auth and lands on slack.com, close the popup
-  // and load that URL in the main view so the session cookies are picked up.
+  // When a popup is created (via window.open or setWindowOpenHandler allow), set a clean Chrome UA
+  // so OAuth providers (Google, Microsoft) don't block it. Then watch for landing on the service
+  // domain to close the popup and refresh the main view with the new session.
   view.webContents.on('did-create-window', (childWindow) => {
-    if (service.type !== 'slack') return
-    childWindow.webContents.on('did-navigate', (_e, url) => {
-      try {
-        const { hostname } = new URL(url)
-        if (hostname === 'slack.com' || hostname.endsWith('.slack.com')) {
-          const targetUrl = url
-          childWindow.close()
-          view.webContents.loadURL(targetUrl).catch((err) =>
-            console.error('[Slack SSO] Failed to load post-auth URL:', err)
-          )
-        }
-      } catch {}
-    })
+    childWindow.webContents.setUserAgent(CHROME_UA)
+    if (service.type === 'slack') {
+      childWindow.webContents.on('did-navigate', (_e, url) => {
+        try {
+          const { hostname } = new URL(url)
+          if (hostname === 'slack.com' || hostname.endsWith('.slack.com')) {
+            const targetUrl = url
+            childWindow.close()
+            view.webContents.loadURL(targetUrl).catch((err) =>
+              console.error('[Slack SSO] Failed to load post-auth URL:', err)
+            )
+          }
+        } catch {}
+      })
+    } else {
+      const serviceDomains = getServiceDomains(service.type)
+      childWindow.webContents.on('did-navigate', (_e, url) => {
+        try {
+          const { hostname } = new URL(url)
+          if (serviceDomains.some((d) => hostname === d || hostname.endsWith('.' + d))) {
+            childWindow.close()
+            view.webContents.reload()
+          }
+        } catch {}
+      })
+    }
   })
 
   // Prevent navigation to non-web protocol deep links; redirect off-domain URLs to system browser
@@ -752,7 +796,16 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
         )
         if (!isAllowed) {
           event.preventDefault()
-          shell.openExternal(url).catch((err) => console.error('Failed to open external URL:', err))
+          // Google and Microsoft block OAuth inside WebContentsView — open as a standalone
+          // BrowserWindow sharing the service's partition so the session cookie lands there.
+          const isOAuthProvider =
+            hostname === 'accounts.google.com' || hostname.endsWith('.accounts.google.com') ||
+            hostname === 'login.microsoftonline.com' || hostname.endsWith('.login.microsoftonline.com')
+          if (isOAuthProvider) {
+            openOAuthPopup(url, serviceId, allowedDomains)
+          } else {
+            shell.openExternal(url).catch((err) => console.error('Failed to open external URL:', err))
+          }
         }
       }
     } catch {

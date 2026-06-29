@@ -105,7 +105,7 @@ export const defaultServices: ServiceConfig[] = [
     id: 'teams',
     name: 'Teams',
     type: 'teams',
-    url: 'https://teams.microsoft.com',
+    url: 'https://teams.microsoft.com/v2',
     enabled: false,
     muted: false
   }
@@ -148,6 +148,24 @@ export function initStore(userDataPath: string): void {
   if (lastVisited['slack'] === 'https://app.slack.com') {
     const { slack: _, ...rest } = lastVisited
     store.set('lastVisited', rest)
+  }
+
+  // Clear stale Teams lastVisited so /v2 is used on next launch
+  if (lastVisited['teams'] === 'https://teams.microsoft.com') {
+    const { teams: _, ...rest } = lastVisited
+    store.set('lastVisited', rest)
+  }
+
+  // Update Teams service URL in existing configs
+  const existingForTeams = store.get('services') || []
+  const teamsService = existingForTeams.find((s) => s.id === 'teams')
+  if (teamsService && teamsService.url === 'https://teams.microsoft.com') {
+    store.set(
+      'services',
+      existingForTeams.map((s) =>
+        s.id === 'teams' ? { ...s, url: 'https://teams.microsoft.com/v2' } : s
+      )
+    )
   }
 
   const existingServices = store.get('services')

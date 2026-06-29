@@ -215,7 +215,7 @@ function App(): React.JSX.Element {
     }
   }
 
-  const enabledServices = services.filter((s) => s.enabled)
+  const enabledServices = services.filter((s) => s.enabled && s.type !== 'teams')
 
   return (
     <div className="w-screen h-screen flex flex-col select-none bg-dominant text-text-primary relative overflow-hidden">
@@ -655,7 +655,7 @@ function DirectoryDashboard(): React.JSX.Element {
             </button>
           </div>
         )}
-        {services.map((service) => {
+        {services.filter((s) => s.type !== 'teams').map((service) => {
           const isEnabled = service.enabled
           const isClearing = clearingServiceIds[service.id]
           return (
