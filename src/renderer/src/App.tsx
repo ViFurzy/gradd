@@ -594,6 +594,10 @@ function DirectoryDashboard(): React.JSX.Element {
         return <img src={instagramLogo} className="w-8 h-8 object-contain" alt="Instagram" />
       case 'gadugadu':
         return <img src={gadugaduLogo} className="w-8 h-8 object-contain" alt="Gadu-Gadu" />
+      case 'linkedin':
+        return <img src={linkedinLogo} className="w-8 h-8 object-contain" alt="LinkedIn" />
+      case 'teams':
+        return <img src={teamsLogo} className="w-8 h-8 object-contain" alt="Teams" />
       default:
         return <Chats size={28} weight="bold" className="text-[#006AFF]" />
     }

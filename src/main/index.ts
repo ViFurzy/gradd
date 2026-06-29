@@ -645,35 +645,26 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
       return { action: 'deny' }
     }
 
-    // Slack SSO can open windows on any IdP (JumpCloud, Okta, Azure AD, etc.) — allow all in-partition
-    if (service.type === 'slack' && (url.startsWith('https://') || url.startsWith('http://'))) {
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          autoHideMenuBar: true,
-          webPreferences: {
-            partition: `persist:service-${service.id}`,
-            sandbox: false
-          }
-        }
-      }
-    }
-
     try {
       const parsedUrl = new URL(url)
       const hostname = parsedUrl.hostname
 
-      // Specific Slack workspace redirection handling: load it inside the view itself
+      // Slack: workspace/app URLs load in the main view; external IdP (JumpCloud, Okta, etc.) open as in-partition popup
       if (service.type === 'slack') {
-        const isWorkspaceSubdomain = hostname.endsWith('.slack.com') &&
-                                     hostname !== 'www.slack.com' &&
-                                     hostname !== 'app.slack.com' &&
-                                     hostname !== 'api.slack.com'
-        const isSlackOAuth = url.includes('slack.com/oauth') || url.includes('slack.com/openid')
-
-        if (isWorkspaceSubdomain && !isSlackOAuth) {
+        if (hostname === 'slack.com' || hostname.endsWith('.slack.com')) {
           view.webContents.loadURL(url).catch((err) => console.error('Failed to load Slack URL in view:', err))
           return { action: 'deny' }
+        }
+        // External SSO provider — open as in-partition popup so auth cookies are shared
+        return {
+          action: 'allow',
+          overrideBrowserWindowOptions: {
+            autoHideMenuBar: true,
+            webPreferences: {
+              partition: `persist:service-${service.id}`,
+              sandbox: false
+            }
+          }
         }
       }
 
@@ -722,6 +713,24 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
     // Open any other external links in the default system browser
     shell.openExternal(url).catch((err) => console.error('Failed to open external URL:', err))
     return { action: 'deny' }
+  })
+
+  // When a Slack SSO popup completes auth and lands on slack.com, close the popup
+  // and load that URL in the main view so the session cookies are picked up.
+  view.webContents.on('did-create-window', (childWindow) => {
+    if (service.type !== 'slack') return
+    childWindow.webContents.on('did-navigate', (_e, url) => {
+      try {
+        const { hostname } = new URL(url)
+        if (hostname === 'slack.com' || hostname.endsWith('.slack.com')) {
+          const targetUrl = url
+          childWindow.close()
+          view.webContents.loadURL(targetUrl).catch((err) =>
+            console.error('[Slack SSO] Failed to load post-auth URL:', err)
+          )
+        }
+      } catch {}
+    })
   })
 
   // Prevent navigation to non-web protocol deep links; redirect off-domain URLs to system browser
