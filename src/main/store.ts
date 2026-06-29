@@ -3,7 +3,7 @@ import Store from 'electron-store'
 export interface ServiceConfig {
   id: string
   name: string
-  type: 'messenger' | 'whatsapp' | 'telegram' | 'slack' | 'instagram' | 'gadugadu'
+  type: 'messenger' | 'whatsapp' | 'telegram' | 'slack' | 'instagram' | 'gadugadu' | 'linkedin' | 'teams'
   url: string
   enabled: boolean
   muted?: boolean
@@ -39,6 +39,7 @@ export interface AppConfig {
   }
   general: {
     closeToTray: boolean;
+    appLockPin?: string;
   }
 }
 
@@ -88,6 +89,22 @@ export const defaultServices: ServiceConfig[] = [
     name: 'Gadu-Gadu',
     type: 'gadugadu',
     url: 'https://gg.pl',
+    enabled: false,
+    muted: false
+  },
+  {
+    id: 'linkedin',
+    name: 'LinkedIn',
+    type: 'linkedin',
+    url: 'https://www.linkedin.com/messaging/',
+    enabled: false,
+    muted: false
+  },
+  {
+    id: 'teams',
+    name: 'Teams',
+    type: 'teams',
+    url: 'https://teams.microsoft.com',
     enabled: false,
     muted: false
   }

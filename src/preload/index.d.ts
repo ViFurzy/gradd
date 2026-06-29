@@ -3,7 +3,7 @@ import { ElectronAPI } from '@electron-toolkit/preload'
 export interface ServiceConfig {
   id: string
   name: string
-  type: 'messenger' | 'whatsapp' | 'telegram' | 'slack' | 'instagram' | 'gadugadu'
+  type: 'messenger' | 'whatsapp' | 'telegram' | 'slack' | 'instagram' | 'gadugadu' | 'linkedin' | 'teams'
   url: string
   enabled: boolean
   muted?: boolean
@@ -32,7 +32,7 @@ export interface GraddAPI {
   loginGoogle(): Promise<{ success: boolean; uid?: string; error?: string; photoURL?: string }>
   logoutGoogle(): Promise<{ success: boolean; error?: string }>
   getAuthStatus(): Promise<{ loggedIn: boolean; uid?: string; photoURL?: string }>
-  getGeneralConfig(): Promise<{ closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean }>
+  getGeneralConfig(): Promise<{ closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean; hasAppLock: boolean }>
   setGeneralConfig(config: { closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean }): Promise<void>
   exportConfig(): Promise<{ success: boolean; error?: string }>
   importConfig(): Promise<{ success: boolean; error?: string }>
@@ -47,6 +47,9 @@ export interface GraddAPI {
   showProfileMenu(): Promise<void>
   onProfileMenuAction(callback: (action: 'settings' | 'logout') => void): void
   openExternal(url: string): Promise<void>
+  setAppPin(pin: string): Promise<boolean>
+  verifyAppPin(pin: string): Promise<boolean>
+  onLockApp(callback: () => void): void
 }
 
 export interface DndConfig {

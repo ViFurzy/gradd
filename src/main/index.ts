@@ -1110,7 +1110,7 @@ function createTray(): void {
   updateTrayMenu()
 }
 
-const ALLOWED_SERVICE_TYPES = ['messenger', 'whatsapp', 'telegram', 'slack', 'instagram', 'gadugadu']
+const ALLOWED_SERVICE_TYPES = ['messenger', 'whatsapp', 'telegram', 'slack', 'instagram', 'gadugadu', 'linkedin', 'teams']
 
 function validateImportedConfig(data: unknown): { valid: boolean; reason?: string } {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {

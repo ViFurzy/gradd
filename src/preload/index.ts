@@ -60,7 +60,12 @@ const api = {
   onProfileMenuAction: (callback: (action: 'settings' | 'logout') => void): void => {
     ipcRenderer.on('profile-menu-action', (_e, action) => callback(action))
   },
-  openExternal: (url: string): Promise<void> => ipcRenderer.invoke('open-external', url)
+  openExternal: (url: string): Promise<void> => ipcRenderer.invoke('open-external', url),
+  setAppPin: (pin: string): Promise<boolean> => ipcRenderer.invoke('set-app-pin', pin),
+  verifyAppPin: (pin: string): Promise<boolean> => ipcRenderer.invoke('verify-app-pin', pin),
+  onLockApp: (callback: () => void): void => {
+    ipcRenderer.on('lock-app', () => callback())
+  }
 }
 
 // Intercept HTML5 Notification API by injecting an interception script

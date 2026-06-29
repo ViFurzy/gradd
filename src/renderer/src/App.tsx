@@ -11,7 +11,8 @@ import {
   SpeakerSlash,
   ArrowClockwise,
   Check,
-  FloppyDisk
+  FloppyDisk,
+  LockKey
 } from '@phosphor-icons/react'
 import { useLayoutStore } from './store/useLayoutStore'
 
@@ -21,7 +22,10 @@ import telegramLogo from './assets/telegram.svg'
 import slackLogo from './assets/slack.svg'
 import instagramLogo from './assets/instagram.png'
 import gadugaduLogo from './assets/gadugadu.svg'
+import linkedinLogo from './assets/linkedin.svg'
+import teamsLogo from './assets/teams.svg'
 import logoImg from './assets/logo.png'
+import LockScreen from './components/LockScreen'
 
 function App(): React.JSX.Element {
   const {
@@ -40,7 +44,9 @@ function App(): React.JSX.Element {
     reorderServices,
     authState,
     generalConfig,
-    logoutGoogle
+    logoutGoogle,
+    isLocked,
+    setLocked
   } = useLayoutStore()
   const [hoveredToggle, setHoveredToggle] = useState(false)
   const [draggedServiceId, setDraggedServiceId] = useState<string | null>(null)
@@ -83,6 +89,13 @@ function App(): React.JSX.Element {
       setDndActiveState(active)
     })
   }, [setDndActiveState])
+
+  // Listen for lock events
+  useEffect(() => {
+    window.api.onLockApp(() => {
+      setLocked(true)
+    })
+  }, [setLocked])
 
   // Listen for services list updates from Electron main process (e.g. from context menus)
   useEffect(() => {
@@ -193,6 +206,10 @@ function App(): React.JSX.Element {
         return <img src={instagramLogo} className="w-5 h-5 object-contain" alt="Instagram" />
       case 'gadugadu':
         return <img src={gadugaduLogo} className="w-5 h-5 object-contain" alt="Gadu-Gadu" />
+      case 'linkedin':
+        return <img src={linkedinLogo} className="w-5 h-5 object-contain" alt="LinkedIn" />
+      case 'teams':
+        return <img src={teamsLogo} className="w-5 h-5 object-contain" alt="Teams" />
       default:
         return <Chats size={20} weight="bold" />
     }
@@ -201,7 +218,9 @@ function App(): React.JSX.Element {
   const enabledServices = services.filter((s) => s.enabled)
 
   return (
-    <div className="w-screen h-screen flex flex-col select-none bg-dominant text-text-primary">
+    <div className="w-screen h-screen flex flex-col select-none bg-dominant text-text-primary relative overflow-hidden">
+      {isLocked && <LockScreen />}
+      
       {/* 32px custom titlebar drag region */}
       <header
         onDoubleClick={() => window.api.doubleClickHeader()}
@@ -714,7 +733,7 @@ function DirectoryDashboard(): React.JSX.Element {
 }
 
 function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Element {
-  const { dndConfig, isDndActive, updateDndConfig, authState, loginGoogle, generalConfig, updateGeneralConfig, layoutMode } = useLayoutStore()
+  const { dndConfig, isDndActive, updateDndConfig, authState, loginGoogle, generalConfig, updateGeneralConfig, layoutMode, setAppPin } = useLayoutStore()
   const [clearingState, setClearingState] = useState<'idle' | 'clearing' | 'success'>('idle')
   const [resetConfirming, setResetConfirming] = useState(false)
   const [appVersion, setAppVersion] = useState<string>('0.0.0')
@@ -863,7 +882,53 @@ function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Elemen
           </div>
         </section>
 
-        {/* Section 1.5: Cloud Sync */}
+        {/* Section 1.5: Privacy & Security */}
+        <section className="bg-secondary border border-surface-border rounded-lg p-5 flex flex-col gap-4">
+          <div className="flex items-center gap-3">
+            <LockKey size={20} weight="bold" className="text-accent" />
+            <h2 className="text-sm font-semibold text-text-primary leading-[1.2]">
+              Privacy & Security
+            </h2>
+          </div>
+          <div className="flex items-center justify-between border-t border-surface-border/50 pt-4 mt-1">
+            <div>
+              <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">
+                App Lock (4-Digit PIN)
+              </h3>
+              <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
+                When enabled, Gradd will require a PIN when starting or restoring from the system tray. OS lock/sleep will also trigger it automatically.
+              </p>
+            </div>
+            <div>
+              {generalConfig?.hasAppLock ? (
+                <button
+                  onClick={async () => {
+                    await setAppPin('')
+                  }}
+                  className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none border bg-destructive/10 hover:bg-destructive/20 text-destructive border-destructive/30"
+                >
+                  Remove PIN
+                </button>
+              ) : (
+                <button
+                  onClick={async () => {
+                    const pin = prompt('Enter a new 4-digit PIN (e.g. 1234):')
+                    if (pin && /^\d{4}$/.test(pin)) {
+                      await setAppPin(pin)
+                    } else if (pin) {
+                      alert('Invalid PIN. Must be exactly 4 digits.')
+                    }
+                  }}
+                  className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none border bg-accent/10 hover:bg-accent/20 text-accent border-accent/30"
+                >
+                  Set PIN
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* Section 1.6: Cloud Sync */}
         <section className="bg-secondary border border-surface-border rounded-lg p-5 flex flex-col gap-4">
           <div className="flex items-center gap-3">
             <Cloud size={20} weight="bold" className="text-accent" />

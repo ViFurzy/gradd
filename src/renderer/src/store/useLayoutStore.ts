@@ -3,7 +3,7 @@ import { create } from 'zustand'
 export interface ServiceConfig {
   id: string
   name: string
-  type: 'messenger' | 'whatsapp' | 'telegram' | 'slack' | 'instagram' | 'gadugadu'
+  type: 'messenger' | 'whatsapp' | 'telegram' | 'slack' | 'instagram' | 'gadugadu' | 'linkedin' | 'teams'
   url: string
   enabled: boolean
   unreadCount?: number
@@ -23,7 +23,9 @@ interface LayoutState {
   activeServiceId: string | null
   activePanel: 'directory' | 'settings' | 'service'
   authState: { loggedIn: boolean; uid?: string; photoURL?: string }
-  generalConfig: { closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean }
+  generalConfig: { closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean; hasAppLock?: boolean }
+  isLocked: boolean
+  setLocked: (locked: boolean) => void
   setLayoutMode: (mode: 'sidebar' | 'tabs') => Promise<void>
   selectService: (id: string | null) => Promise<void>
   toggleService: (id: string) => Promise<void>
@@ -40,6 +42,8 @@ interface LayoutState {
   updateGeneralConfig: (config: Partial<{ closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean }>) => Promise<void>
   loginGoogle: () => Promise<void>
   logoutGoogle: () => Promise<void>
+  setAppPin: (pin: string) => Promise<boolean>
+  verifyAppPin: (pin: string) => Promise<boolean>
 }
 
 export const useLayoutStore = create<LayoutState>((set, get) => ({
@@ -56,6 +60,8 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   },
   generalConfig: { closeToTray: true, showTabLabels: true, startWithWindows: false },
   isDndActive: false,
+  isLocked: false,
+  setLocked: (locked) => set({ isLocked: locked }),
   setLayoutMode: async (mode) => {
     set({ layoutMode: mode })
     await window.api.setLayoutMode(mode)
@@ -116,7 +122,8 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         isDndActive: dndActiveState,
         authState,
         generalConfig,
-        activePanel: 'directory' // Start on the directory dashboard
+        activePanel: 'directory', // Start on the directory dashboard
+        isLocked: !!generalConfig.hasAppLock
       })
 
       // Select first enabled service if any are available
@@ -167,5 +174,15 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     if (result.success) {
       set({ authState: { loggedIn: false } })
     }
+  },
+  setAppPin: async (pin: string) => {
+    const success = await window.api.setAppPin(pin)
+    if (success) {
+      set((state) => ({ generalConfig: { ...state.generalConfig, hasAppLock: !!pin } }))
+    }
+    return success
+  },
+  verifyAppPin: async (pin: string) => {
+    return await window.api.verifyAppPin(pin)
   }
 }))
