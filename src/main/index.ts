@@ -1,6 +1,6 @@
 import electron from 'electron'
 import type { BrowserWindow as BrowserWindowType, Tray as TrayType, WebContentsView as WebContentsViewType } from 'electron'
-const { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, WebContentsView, session, Notification, dialog, clipboard } = electron
+const { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, WebContentsView, session, Notification, dialog, clipboard, powerMonitor } = electron
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { readFileSync, writeFileSync } from 'fs'
@@ -645,6 +645,20 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
       return { action: 'deny' }
     }
 
+    // Slack SSO can open windows on any IdP (JumpCloud, Okta, Azure AD, etc.) — allow all in-partition
+    if (service.type === 'slack' && (url.startsWith('https://') || url.startsWith('http://'))) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          autoHideMenuBar: true,
+          webPreferences: {
+            partition: `persist:service-${service.id}`,
+            sandbox: false
+          }
+        }
+      }
+    }
+
     try {
       const parsedUrl = new URL(url)
       const hostname = parsedUrl.hostname
@@ -716,6 +730,8 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
       event.preventDefault()
       return
     }
+    // Slack SSO can redirect through any IdP (JumpCloud, Okta, Azure AD, etc.) — don't restrict
+    if (service.type === 'slack') return
     try {
       const { hostname } = new URL(url)
       const allowedDomains = getServiceDomains(service.type)
@@ -857,10 +873,12 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
     });
   }
 
-  // Suppress the Windows USB security key dialog on any service that triggers WebAuthn.
+  // Suppress the Windows USB security key dialog on services that don't need WebAuthn.
+  // Skipped for Slack — users with JumpCloud/Okta SSO need real hardware key auth.
   // The preload script-tag injection is blocked by strict CSP on pages like accounts.meta.com;
   // executeJavaScript() runs in the page's main world and bypasses CSP entirely.
   view.webContents.on('did-finish-load', () => {
+    if (service.type === 'slack') return
     view.webContents.executeJavaScript(`
       (function() {
         if (window.__graddNoUsbKey) return;
@@ -1493,7 +1511,8 @@ app.whenReady().then(() => {
     return {
       closeToTray: saved.closeToTray !== false,
       showTabLabels: saved.showTabLabels !== false,
-      startWithWindows: app.getLoginItemSettings().openAtLogin
+      startWithWindows: app.getLoginItemSettings().openAtLogin,
+      hasAppLock: !!saved.appLockPin
     }
   })
 
@@ -1713,6 +1732,36 @@ app.whenReady().then(() => {
     store.clear();
     app.relaunch();
     app.exit(0);
+  });
+  
+  // --- App Lock ---
+  ipcMain.handle('set-app-pin', (_, pin: string) => {
+    if (!pin) {
+      const general = store.get('general');
+      delete general.appLockPin;
+      store.set('general', general);
+      return true;
+    }
+    const encrypted = encryptToken(pin);
+    const general = store.get('general');
+    general.appLockPin = encrypted;
+    store.set('general', general);
+    return true;
+  });
+
+  ipcMain.handle('verify-app-pin', (_, pin: string) => {
+    const general = store.get('general');
+    if (!general?.appLockPin) return true;
+    const decrypted = decryptToken(general.appLockPin);
+    return decrypted === pin;
+  });
+
+  powerMonitor.on('lock-screen', () => {
+    if (mainWindow) mainWindow.webContents.send('lock-app');
+  });
+
+  powerMonitor.on('suspend', () => {
+    if (mainWindow) mainWindow.webContents.send('lock-app');
   });
   // -----------------------------
 
