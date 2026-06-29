@@ -73,7 +73,7 @@ export const defaultServices: ServiceConfig[] = [
     id: 'slack',
     name: 'Slack',
     type: 'slack',
-    url: 'https://app.slack.com',
+    url: 'https://app.slack.com/client',
     enabled: true,
     muted: false
   },
@@ -143,6 +143,13 @@ export function initStore(userDataPath: string): void {
   })
 
   // Migrations
+  // Clear stale Slack chooser URL so /client is used on next launch
+  const lastVisited = store.get('lastVisited') || {}
+  if (lastVisited['slack'] === 'https://app.slack.com') {
+    const { slack: _, ...rest } = lastVisited
+    store.set('lastVisited', rest)
+  }
+
   const existingServices = store.get('services')
   if (existingServices && Array.isArray(existingServices)) {
     let changed = false
