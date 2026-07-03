@@ -93,7 +93,9 @@ function App(): React.JSX.Element {
   // Listen for lock events
   useEffect(() => {
     window.api.onLockApp(() => {
-      setLocked(true)
+      if (useLayoutStore.getState().generalConfig?.hasAppLock) {
+        setLocked(true)
+      }
     })
   }, [setLocked])
 
@@ -903,17 +905,8 @@ function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Elemen
                 When enabled, Gradd will require a PIN when starting or restoring from the system tray. OS lock/sleep will also trigger it automatically.
               </p>
             </div>
-            <div>
-              {generalConfig?.hasAppLock ? (
-                <button
-                  onClick={async () => {
-                    await setAppPin('')
-                  }}
-                  className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none border bg-destructive/10 hover:bg-destructive/20 text-destructive border-destructive/30"
-                >
-                  Remove PIN
-                </button>
-              ) : (
+            <div className="flex items-center gap-3">
+              {generalConfig?.hasAppLock && (
                 <button
                   onClick={async () => {
                     const pin = prompt('Enter a new 4-digit PIN (e.g. 1234):')
@@ -923,11 +916,34 @@ function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Elemen
                       alert('Invalid PIN. Must be exactly 4 digits.')
                     }
                   }}
-                  className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none border bg-accent/10 hover:bg-accent/20 text-accent border-accent/30"
+                  className="no-drag px-3 py-1.5 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none border bg-secondary hover:bg-hover-surface text-text-primary border-surface-border"
                 >
-                  Set PIN
+                  Change PIN
                 </button>
               )}
+              <button
+                onClick={async () => {
+                  if (generalConfig?.hasAppLock) {
+                    await setAppPin('')
+                  } else {
+                    const pin = prompt('Enter a new 4-digit PIN (e.g. 1234):')
+                    if (pin && /^\d{4}$/.test(pin)) {
+                      await setAppPin(pin)
+                    } else if (pin) {
+                      alert('Invalid PIN. Must be exactly 4 digits.')
+                    }
+                  }
+                }}
+                className={`no-drag relative w-10 h-6 rounded-full transition-colors duration-150 cursor-pointer focus:outline-none ${
+                  generalConfig?.hasAppLock ? 'bg-accent' : 'bg-dominant border border-surface-border'
+                }`}
+              >
+                <div
+                  className={`absolute top-[3px] left-[3px] w-4.5 h-4.5 rounded-full bg-text-primary shadow transform transition-transform duration-150 ${
+                    generalConfig?.hasAppLock ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
             </div>
           </div>
         </section>

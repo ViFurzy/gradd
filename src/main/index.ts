@@ -1802,13 +1802,13 @@ app.whenReady().then(() => {
   // --- App Lock ---
   ipcMain.handle('set-app-pin', (_, pin: string) => {
     if (!pin) {
-      const general = store.get('general');
+      const general = (store.get('general') || {}) as any;
       delete general.appLockPin;
       store.set('general', general);
       return true;
     }
     const encrypted = encryptToken(pin);
-    const general = store.get('general');
+    const general = (store.get('general') || {}) as any;
     general.appLockPin = encrypted;
     store.set('general', general);
     return true;
@@ -1828,6 +1828,17 @@ app.whenReady().then(() => {
   powerMonitor.on('suspend', () => {
     if (mainWindow) mainWindow.webContents.send('lock-app');
   });
+
+  const refreshActiveViewBounds = (): void => {
+    if (!activeServiceId) return
+    const view = serviceViews.get(activeServiceId)
+    if (view && !view.webContents.isDestroyed()) {
+      view.setBounds(contentBounds)
+    }
+  }
+
+  powerMonitor.on('unlock-screen', refreshActiveViewBounds)
+  powerMonitor.on('resume', refreshActiveViewBounds)
   // -----------------------------
 
   function setupCloudSyncListener(uid: string) {
