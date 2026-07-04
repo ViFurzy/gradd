@@ -384,23 +384,6 @@ function App(): React.JSX.Element {
                 >
                   <Gear size={20} weight="bold" />
                 </button>
-
-                {/* Google Account Profile Picture */}
-                {authState.loggedIn && authState.photoURL && (
-                  <div className="mt-1 pt-3 pb-2 border-t border-surface-border/50 flex justify-center w-full relative">
-                    <button
-                      onClick={() => window.api.showProfileMenu()}
-                      className="no-drag w-7 h-7 rounded-full overflow-hidden border border-surface-border cursor-pointer hover:border-accent transition-all duration-150"
-                      title="Google Account"
-                    >
-                      <img 
-                        src={authState.photoURL} 
-                        className="w-full h-full object-cover select-none pointer-events-none" 
-                        alt="Google Profile" 
-                      />
-                    </button>
-                  </div>
-                )}
               </div>
             </aside>
 
@@ -525,23 +508,6 @@ function App(): React.JSX.Element {
                 >
                   <Gear size={18} weight="bold" />
                 </button>
-
-                {/* Google Account Profile Picture */}
-                {authState.loggedIn && authState.photoURL && (
-                  <div className="ml-1 pl-2 border-l border-surface-border/50 flex items-center h-full relative">
-                    <button
-                      onClick={() => window.api.showProfileMenu()}
-                      className="no-drag w-7 h-7 rounded-full overflow-hidden border border-surface-border cursor-pointer hover:border-accent transition-all duration-150"
-                      title="Google Account"
-                    >
-                      <img 
-                        src={authState.photoURL} 
-                        className="w-full h-full object-cover select-none pointer-events-none" 
-                        alt="Google Profile" 
-                      />
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -620,43 +586,6 @@ function DirectoryDashboard(): React.JSX.Element {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {!authState.loggedIn ? (
-          <div className="col-span-1 md:col-span-2 bg-accent/10 border border-accent/20 rounded-lg p-5 flex flex-col md:flex-row items-start md:items-center justify-between mb-2 gap-4">
-            <div className="flex items-center gap-3">
-              <Cloud size={24} weight="bold" className="text-accent flex-shrink-0" />
-              <div>
-                <h3 className="text-sm font-semibold text-accent leading-[1.2]">Enable Cloud Sync</h3>
-                <p className="text-xs text-text-muted mt-1 leading-[1.4]">
-                  If you want to securely backup your layouts, DND schedules, and settings across devices, just log in via Google!
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={showSettings}
-              className="no-drag whitespace-nowrap px-4 py-2 bg-accent/20 hover:bg-accent/30 text-accent border border-accent/30 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer"
-            >
-              Go to Settings
-            </button>
-          </div>
-        ) : (
-          <div className="col-span-1 md:col-span-2 bg-active-surface/50 border border-surface-border rounded-lg p-5 flex flex-col md:flex-row items-start md:items-center justify-between mb-2 gap-4">
-            <div className="flex items-center gap-3">
-              <Cloud size={24} weight="bold" className="text-accent flex-shrink-0" />
-              <div>
-                <h3 className="text-sm font-semibold text-text-primary leading-[1.2]">Cloud Sync Active</h3>
-                <p className="text-xs text-text-muted mt-1 leading-[1.4]">
-                  Your settings are currently being backed up and synced to your Google account.
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={showSettings}
-              className="no-drag whitespace-nowrap px-4 py-2 bg-secondary hover:bg-hover-surface text-text-primary border border-surface-border text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer"
-            >
-              Manage Settings
-            </button>
-          </div>
-        )}
         {services.filter((s) => s.type !== 'teams').map((service) => {
           const isEnabled = service.enabled
           const isClearing = clearingServiceIds[service.id]
@@ -944,61 +873,6 @@ function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Elemen
                   }`}
                 />
               </button>
-            </div>
-          </div>
-        </section>
-
-        {/* Section 1.6: Cloud Sync */}
-        <section className="bg-secondary border border-surface-border rounded-lg p-5 flex flex-col gap-4">
-          <div className="flex items-center gap-3">
-            <Cloud size={20} weight="bold" className="text-accent" />
-            <h2 className="text-sm font-semibold text-text-primary leading-[1.2]">
-              Cloud Sync
-            </h2>
-          </div>
-          <div className="flex items-center justify-between border-t border-surface-border/50 pt-4 mt-1">
-            <div>
-              <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">
-                Google Account Sync
-              </h3>
-              <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
-                {authState.loggedIn 
-                  ? `Signed in. Your layouts and configurations are automatically synced to the cloud.`
-                  : `Sign in with Google to sync your service layout, DND configurations, and settings to the cloud.`}
-              </p>
-            </div>
-            <div>
-              {authState.loggedIn ? (
-                <button
-                  onClick={() => onLogout()}
-                  className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none bg-dominant hover:bg-hover-surface text-text-primary border border-surface-border"
-                >
-                  Sign Out
-                </button>
-              ) : (
-                <div className="flex flex-col items-end gap-1.5">
-                  <button
-                    onClick={async () => {
-                      setLoginState('waiting')
-                      setLoginError('')
-                      try {
-                        await loginGoogle()
-                        setLoginState('idle')
-                      } catch (err: any) {
-                        setLoginState('error')
-                        setLoginError(err.message || 'Login failed')
-                      }
-                    }}
-                    disabled={loginState === 'waiting'}
-                    className={`no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none border ${loginState === 'error' ? 'bg-destructive/10 text-destructive border-destructive/30' : 'bg-accent/10 hover:bg-accent/20 text-accent border-accent/30'} disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    {loginState === 'waiting' ? 'Waiting for browser…' : 'Sign in with Google'}
-                  </button>
-                  {loginState === 'error' && (
-                    <p className="text-xs text-destructive leading-[1.4] max-w-[240px] text-right">{loginError}</p>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         </section>
