@@ -5,7 +5,6 @@ import {
   Gear,
   Trash,
   Moon,
-  Cloud,
   Desktop,
   SpeakerHigh,
   SpeakerSlash,
@@ -42,31 +41,13 @@ function App(): React.JSX.Element {
     isDndActive,
     setDndActiveState,
     reorderServices,
-    authState,
     generalConfig,
-    logoutGoogle,
     isLocked,
     setLocked
   } = useLayoutStore()
   const [hoveredToggle, setHoveredToggle] = useState(false)
   const [draggedServiceId, setDraggedServiceId] = useState<string | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (window.api.onProfileMenuAction) {
-      window.api.onProfileMenuAction((action) => {
-        if (action === 'settings') {
-          showSettings()
-        } else if (action === 'logout') {
-          handleLogout()
-        }
-      })
-    }
-  }, [showSettings])
-
-  const handleLogout = async () => {
-    await logoutGoogle()
-  }
 
   const totalUnreadCount = services
     .filter((s) => s.enabled && !s.muted)
@@ -393,7 +374,7 @@ function App(): React.JSX.Element {
               className="relative flex-1 h-full bg-transparent flex flex-col items-center justify-start overflow-hidden content-area"
             >
               {activePanel === 'directory' ? <DirectoryDashboard /> : null}
-              {activePanel === 'settings' ? <SettingsPanel onLogout={handleLogout} /> : null}
+              {activePanel === 'settings' ? <SettingsPanel /> : null}
             </main>
           </>
         ) : (
@@ -517,7 +498,7 @@ function App(): React.JSX.Element {
               className="relative flex-1 h-full bg-transparent flex flex-col items-center justify-start overflow-hidden content-area"
             >
               {activePanel === 'directory' ? <DirectoryDashboard /> : null}
-              {activePanel === 'settings' ? <SettingsPanel onLogout={handleLogout} /> : null}
+              {activePanel === 'settings' ? <SettingsPanel /> : null}
             </main>
           </div>
         )}
@@ -527,7 +508,7 @@ function App(): React.JSX.Element {
 }
 
 function DirectoryDashboard(): React.JSX.Element {
-  const { services, toggleService, selectService, toggleMuteService, authState, showSettings } = useLayoutStore()
+  const { services, toggleService, selectService, toggleMuteService } = useLayoutStore()
   const [clearingServiceIds, setClearingServiceIds] = useState<Record<string, boolean>>({})
 
   const handleClearService = async (serviceId: string, name: string): Promise<void> => {
@@ -667,15 +648,13 @@ function DirectoryDashboard(): React.JSX.Element {
   )
 }
 
-function SettingsPanel({ onLogout }: { onLogout: () => void }): React.JSX.Element {
-  const { dndConfig, isDndActive, updateDndConfig, authState, loginGoogle, generalConfig, updateGeneralConfig, layoutMode, setAppPin } = useLayoutStore()
+function SettingsPanel(): React.JSX.Element {
+  const { dndConfig, isDndActive, updateDndConfig, generalConfig, updateGeneralConfig, layoutMode, setAppPin } = useLayoutStore()
   const [clearingState, setClearingState] = useState<'idle' | 'clearing' | 'success'>('idle')
   const [resetConfirming, setResetConfirming] = useState(false)
   const [appVersion, setAppVersion] = useState<string>('0.0.0')
   const [checkingState, setCheckingState] = useState<'idle' | 'checking' | 'up-to-date' | 'available' | 'downloaded' | 'error'>('idle')
   const [updateError, setUpdateError] = useState<string>('')
-  const [loginState, setLoginState] = useState<'idle' | 'waiting' | 'error'>('idle')
-  const [loginError, setLoginError] = useState<string>('')
 
   useEffect(() => {
     window.api.getAppVersion()
