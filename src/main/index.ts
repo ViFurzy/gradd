@@ -50,6 +50,13 @@ app.on('second-instance', () => {
 // Disable Chrome's autoplay user gesture requirement to allow web page notification sounds
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
+// Disable Chromium's native window occlusion tracking (Windows). Without this, the OS marks
+// the window occluded when the display sleeps or the screensaver activates after idle — even
+// without a real lock or Electron hide/minimize — which flips visibilityState to hidden inside
+// embedded service views and causes SPAs like Telegram Web to tear down their render loop
+// (goes solid black until manually reloaded).
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
