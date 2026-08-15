@@ -1,6 +1,6 @@
 import electron from 'electron'
 import type { BrowserWindow as BrowserWindowType, Tray as TrayType, WebContentsView as WebContentsViewType } from 'electron'
-const { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, WebContentsView, session, Notification, dialog, clipboard, powerMonitor } = electron
+const { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, WebContentsView, session, Notification, dialog, clipboard, powerMonitor, screen } = electron
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { readFileSync, writeFileSync } from 'fs'
@@ -1065,9 +1065,26 @@ function updateTrayMenu(): void {
 function createWindow(): void {
   const savedBounds = store.get('window.bounds')
 
+  // Validate the saved position against currently connected displays. Electron does not
+  // clamp or reject off-screen coordinates — it will happily show() a window at a position
+  // outside every display (isVisible() still reports true), rendering it nowhere visible.
+  // If the saved x/y no longer falls on any connected display (monitor removed/rearranged
+  // since it was saved), drop it so Electron falls back to its default centering.
+  const hasOnScreenPosition =
+    savedBounds.x !== undefined &&
+    savedBounds.y !== undefined &&
+    screen.getAllDisplays().some(({ workArea }) => {
+      return (
+        savedBounds.x! >= workArea.x &&
+        savedBounds.y! >= workArea.y &&
+        savedBounds.x! < workArea.x + workArea.width &&
+        savedBounds.y! < workArea.y + workArea.height
+      )
+    })
+
   mainWindow = new BrowserWindow({
-    x: savedBounds.x,
-    y: savedBounds.y,
+    x: hasOnScreenPosition ? savedBounds.x : undefined,
+    y: hasOnScreenPosition ? savedBounds.y : undefined,
     width: savedBounds.width || 1200,
     height: savedBounds.height || 800,
     minWidth: 800,
