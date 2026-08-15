@@ -584,6 +584,11 @@ async function runPeriodicUnreadScrape(): Promise<void> {
 
   for (const service of services) {
     if (!service.enabled) continue
+    // Active tab's badge is already covered in real time by the page-title-updated
+    // listener (and force-zeroed by handleUnreadCountChange while focused) — the
+    // DOM-heavy executeJavaScript scrape below is redundant work for it, repeated
+    // every cycle forever across up to 8 always-unthrottled service views.
+    if (service.id === activeServiceId) continue
     const view = serviceViews.get(service.id)
     if (!view) continue
 
