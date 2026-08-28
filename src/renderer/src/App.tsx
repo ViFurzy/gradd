@@ -655,11 +655,17 @@ function SettingsPanel(): React.JSX.Element {
   const [appVersion, setAppVersion] = useState<string>('0.0.0')
   const [checkingState, setCheckingState] = useState<'idle' | 'checking' | 'up-to-date' | 'available' | 'downloaded' | 'error'>('idle')
   const [updateError, setUpdateError] = useState<string>('')
+  const [stats, setStats] = useState<{ dau: number; mau: number } | null>(null)
+  const [statsError, setStatsError] = useState<string>('')
 
   useEffect(() => {
     window.api.getAppVersion()
       .then((v) => setAppVersion(v))
       .catch((err) => console.error('Failed to get app version:', err))
+
+    window.api.getActiveUserStats()
+      .then(setStats)
+      .catch((err) => setStatsError(err.message))
 
     window.api.onUpdateChecking(() => setCheckingState('checking'))
     window.api.onUpdateAvailable(() => setCheckingState('available'))
@@ -682,6 +688,13 @@ function SettingsPanel(): React.JSX.Element {
     }
     setCheckingState('checking')
     window.api.checkForUpdates()
+  }
+
+  const handleDevSignIn = async (): Promise<void> => {
+    await window.api.loginGoogle()
+    window.api.getActiveUserStats()
+      .then(setStats)
+      .catch((err) => setStatsError(err.message))
   }
 
   const handleClearSessions = async (): Promise<void> => {
@@ -1159,6 +1172,31 @@ function SettingsPanel(): React.JSX.Element {
           </div>
         </section>
 
+        {/* Section: Dev-only DAU/MAU readout */}
+        {(stats || statsError) && (
+          <section className="bg-secondary border border-surface-border rounded-lg p-5 flex flex-col gap-4">
+            <h2 className="text-sm font-semibold text-text-primary leading-[1.2]">
+              Active Users (dev only)
+            </h2>
+            {stats && (
+              <div className="flex gap-6 text-xs text-text-primary">
+                <span>DAU: <span className="text-accent font-semibold">{stats.dau}</span></span>
+                <span>MAU: <span className="text-accent font-semibold">{stats.mau}</span></span>
+              </div>
+            )}
+            {statsError && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-destructive">{statsError}</span>
+                <button
+                  onClick={handleDevSignIn}
+                  className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer bg-accent text-white hover:bg-accent/80"
+                >
+                  Sign in with Google
+                </button>
+              </div>
+            )}
+          </section>
+        )}
 
       </div>
     </div>

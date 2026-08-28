@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithCredential, GoogleAuthProvider, signOut as firebaseSignOut } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp, collection, query, where, Timestamp, getCountFromServer } from 'firebase/firestore';
 
 // User must provide these in .env
 const firebaseConfig = {
@@ -57,6 +57,17 @@ export async function recordHeartbeat(installId: string, appVersion: string): Pr
     lastSeen: serverTimestamp(),
     appVersion
   }, { merge: true });
+}
+
+export async function getActiveUserStats(): Promise<{ dau: number; mau: number } | null> {
+  if (!db) return null;
+  const dauCutoff = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
+  const mauCutoff = Timestamp.fromMillis(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const [dauSnap, mauSnap] = await Promise.all([
+    getCountFromServer(query(collection(db, 'activity'), where('lastSeen', '>=', dauCutoff))),
+    getCountFromServer(query(collection(db, 'activity'), where('lastSeen', '>=', mauCutoff)))
+  ]);
+  return { dau: dauSnap.data().count, mau: mauSnap.data().count };
 }
 
 export function onCloudConfigChanged(uid: string, callback: (config: any) => void): () => void {

@@ -31,6 +31,7 @@ const api = {
     ipcRenderer.on('services-updated', (_event, services) => callback(services))
   },
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
+  getActiveUserStats: (): Promise<{ dau: number; mau: number } | null> => ipcRenderer.invoke('get-active-user-stats'),
   loginGoogle: (): Promise<{ success: boolean; uid?: string; error?: string }> => ipcRenderer.invoke('login-google'),
   logoutGoogle: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('logout-google'),
   getAuthStatus: (): Promise<{ loggedIn: boolean; uid?: string; photoURL?: string }> => ipcRenderer.invoke('get-auth-status'),

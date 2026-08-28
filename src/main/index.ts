@@ -8,7 +8,7 @@ import { randomUUID } from 'crypto'
 import icon from '../../resources/icon.png?asset'
 import { store, initStore, DndConfig, defaultServices } from './store.js'
 import { loginWithGoogle, refreshGoogleToken, encryptToken, decryptToken, getGoogleUserInfo } from './auth.js'
-import { loginToFirebase, logoutFromFirebase, syncConfigToCloud, fetchConfigFromCloud, onCloudConfigChanged, recordHeartbeat } from './firebase.js'
+import { loginToFirebase, logoutFromFirebase, syncConfigToCloud, fetchConfigFromCloud, onCloudConfigChanged, recordHeartbeat, getActiveUserStats } from './firebase.js'
 import pkg from 'electron-updater'
 let isDev = false // set in app.whenReady
 
@@ -1612,6 +1612,11 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-app-version', () => {
     return app.getVersion()
+  })
+
+  ipcMain.handle('get-active-user-stats', async () => {
+    if (!isDev) return null
+    return getActiveUserStats()
   })
 
   ipcMain.handle('open-external', (_event, url: string) => {

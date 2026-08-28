@@ -29,6 +29,7 @@ export interface GraddAPI {
   onDndStatusChanged(callback: (active: boolean) => void): void
   onServicesUpdated(callback: (services: ServiceConfig[]) => void): void
   getAppVersion(): Promise<string>
+  getActiveUserStats(): Promise<{ dau: number; mau: number } | null>
   loginGoogle(): Promise<{ success: boolean; uid?: string; error?: string; photoURL?: string }>
   logoutGoogle(): Promise<{ success: boolean; error?: string }>
   getAuthStatus(): Promise<{ loggedIn: boolean; uid?: string; photoURL?: string }>
