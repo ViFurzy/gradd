@@ -42,6 +42,7 @@ export interface AppConfig {
     appLockPin?: string;
   }
   lastVisited?: Record<string, string>
+  installId?: string
 }
 
 export const defaultServices: ServiceConfig[] = [

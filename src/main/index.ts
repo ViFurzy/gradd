@@ -4,10 +4,11 @@ const { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, WebContents
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { readFileSync, writeFileSync } from 'fs'
+import { randomUUID } from 'crypto'
 import icon from '../../resources/icon.png?asset'
 import { store, initStore, DndConfig, defaultServices } from './store.js'
 import { loginWithGoogle, refreshGoogleToken, encryptToken, decryptToken, getGoogleUserInfo } from './auth.js'
-import { loginToFirebase, logoutFromFirebase, syncConfigToCloud, fetchConfigFromCloud, onCloudConfigChanged } from './firebase.js'
+import { loginToFirebase, logoutFromFirebase, syncConfigToCloud, fetchConfigFromCloud, onCloudConfigChanged, recordHeartbeat } from './firebase.js'
 import pkg from 'electron-updater'
 let isDev = false // set in app.whenReady
 
@@ -1290,6 +1291,15 @@ app.on('web-contents-created', (_, contents) => {
 app.whenReady().then(() => {
   isDev = !app.isPackaged
   initStore(app.getPath('userData'))
+
+  // Anonymous DAU/MAU heartbeat — fire-and-forget so a network failure can't delay startup
+  let installId = store.get('installId')
+  if (!installId) {
+    installId = randomUUID()
+    store.set('installId', installId)
+  }
+  recordHeartbeat(installId, app.getVersion()).catch(console.error)
+
   const { autoUpdater } = pkg
 
   // Open/close DevTools with F12 in dev mode

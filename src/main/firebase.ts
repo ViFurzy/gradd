@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithCredential, GoogleAuthProvider, signOut as firebaseSignOut } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
 // User must provide these in .env
 const firebaseConfig = {
@@ -49,6 +49,14 @@ export async function fetchConfigFromCloud(uid: string): Promise<any | null> {
     return snapshot.data().config;
   }
   return null;
+}
+
+export async function recordHeartbeat(installId: string, appVersion: string): Promise<void> {
+  if (!db) return;
+  await setDoc(doc(db, 'activity', installId), {
+    lastSeen: serverTimestamp(),
+    appVersion
+  }, { merge: true });
 }
 
 export function onCloudConfigChanged(uid: string, callback: (config: any) => void): () => void {
