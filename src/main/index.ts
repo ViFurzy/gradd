@@ -1156,6 +1156,14 @@ function createWindow(): void {
     }
   })
 
+  // Windows shutdown/restart/logoff: without this, the app never quits (it just hides to tray),
+  // so Windows finds the process still running and shows the "preventing shutdown" dialog.
+  // Reuse the same isQuitting + app.quit() path the tray "Quit" menu item already uses.
+  mainWindow.on('session-end', () => {
+    isQuitting = true
+    app.quit()
+  })
+
   // Dynamic Tray Menu Labels
   mainWindow.on('show', updateTrayMenu)
   mainWindow.on('hide', updateTrayMenu)
