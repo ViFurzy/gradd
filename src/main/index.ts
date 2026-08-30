@@ -630,6 +630,34 @@ function recreateServiceView(serviceId: string): void {
   }
 }
 
+const IDLE_UNLOAD_MS = 5 * 60 * 1000
+
+// Destroys the WebContentsView of any service that hasn't been the active tab
+// for IDLE_UNLOAD_MS, returning its renderer memory to the OS. The active tab
+// is never touched. Recreation happens lazily via getOrCreateView on the next
+// switch-service — this function only tears down, it never recreates/reloads.
+function unloadIdleServiceViews(): void {
+  const now = Date.now()
+  // Snapshot keys first to avoid mutating the map while iterating.
+  for (const serviceId of [...serviceViews.keys()]) {
+    if (serviceId === activeServiceId) continue
+    const lastActive = serviceLastActive.get(serviceId) ?? 0
+    if (now - lastActive <= IDLE_UNLOAD_MS) continue
+
+    const view = serviceViews.get(serviceId)
+    try {
+      if (view && !view.webContents.isDestroyed()) {
+        if (mainWindow) mainWindow.contentView.removeChildView(view)
+        ;(view.webContents as any).destroy()
+      }
+    } catch (_) { /* ignore */ }
+    serviceViews.delete(serviceId)
+    serviceLastActive.delete(serviceId)
+    serviceZeroStreak.delete(serviceId)
+    console.log(`[Main] Unloaded idle service view '${serviceId}' (inactive for ${Math.round((now - lastActive) / 1000)}s)`)
+  }
+}
+
 const CHROME_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
 
@@ -1946,6 +1974,9 @@ app.whenReady().then(() => {
 
   // Periodically scrape unread counts for background tabs (active tab uses title-update events)
   setInterval(runPeriodicUnreadScrape, 8000)
+
+  // Periodically unload service views idle for longer than IDLE_UNLOAD_MS to free renderer memory
+  setInterval(unloadIdleServiceViews, 60000)
 
   createWindow()
   createTray()
