@@ -840,7 +840,9 @@ function openOAuthPopup(url: string, serviceId: string, serviceDomains: string[]
           view.webContents.reload()
         }
       }
-    } catch {}
+    } catch {
+      // Malformed popup URL: nothing to reload
+    }
   })
 }
 
@@ -971,7 +973,9 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
               .loadURL(targetUrl)
               .catch((err) => console.error('[Slack SSO] Failed to load post-auth URL:', err))
           }
-        } catch {}
+        } catch {
+          // Unparseable URL: not a Slack post-auth redirect, ignore
+        }
       })
     } else {
       const serviceDomains = getServiceDomains(service.type)
@@ -982,7 +986,9 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
             childWindow.close()
             view.webContents.reload()
           }
-        } catch {}
+        } catch {
+          // Unparseable URL: not a service redirect, ignore
+        }
       })
     }
   })
@@ -1047,7 +1053,9 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
               handleUnreadCountChange(serviceId, 0)
             }
           })
-          .catch(() => {})
+          .catch(() => {
+            // Page navigating or view destroyed; the next poll retries
+          })
       }, 600)
     }
   })
@@ -1149,7 +1157,9 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
         })();
       `
         )
-        .catch(() => {})
+        .catch(() => {
+          // Best-effort page script; failure (e.g. view destroyed) is non-fatal
+        })
     })
   }
 
@@ -1188,7 +1198,9 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
       })();
     `
       )
-      .catch(() => {})
+      .catch(() => {
+        // Best-effort page script; failure (e.g. view destroyed) is non-fatal
+      })
   })
 
   // Apply initial mute state based on DND or per-service settings
@@ -1828,7 +1840,9 @@ app.whenReady().then(() => {
             mainWindow?.focus()
           })
           notif.show()
-        } catch {}
+        } catch {
+          // Notification is best-effort; failing to show a toast must not break the handler
+        }
       }
       // Identify the sending service and rescrape immediately
       for (const [serviceId, view] of serviceViews) {
@@ -1840,7 +1854,9 @@ app.whenReady().then(() => {
               .then((count) => {
                 handleUnreadCountChange(serviceId, count)
               })
-              .catch(() => {})
+              .catch(() => {
+                // Scrape is best-effort; the next poll retries
+              })
           }
           break
         }

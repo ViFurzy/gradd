@@ -26,7 +26,6 @@ Gradd is a Windows desktop application that aggregates multiple messaging platfo
 
 - **Multi-service aggregation** - Switch between WhatsApp, Telegram, Messenger, Slack, Instagram, and Gadu-Gadu from a unified sidebar or tab bar.
 - **Complete session isolation** - Every service uses its own Chromium partition (`persist:service-<id>`), so cookies, storage, and credentials are fully sandboxed.
-- **Google Cloud Sync** - Log in with your Google account to sync your layout, service order, and DND schedule across devices via Firestore.
 - **Local Backup & Restore** - Export and import your full configuration as a JSON file without cloud credentials.
 - **Do Not Disturb** - Toggle DND manually or set a recurring schedule (supports midnight wrap). Mutes all audio and blocks OS notifications while active.
 - **Per-service mute** - Mute audio for individual services independently of DND.
@@ -51,9 +50,6 @@ Download the latest release from the [Releases](https://github.com/ViFurzy/gradd
 ## Privacy & Security
 
 - Messages and credentials are **never** sent to any Gradd server - all message data stays in Chromium's local partition storage.
-- Cloud Sync stores only layout preferences (service list, DND schedule, layout mode) - no message content.
-- Google OAuth uses the PKCE flow with a loopback server on an OS-assigned port; no client secret is required for the native-app flow.
-- The Google refresh token is encrypted using the OS keyring via Electron's `safeStorage` API before being written to disk.
 - Service WebContentsViews run with `sandbox: true` - Chromium renderer exploits are contained and cannot reach Node.js.
 - The `import-config` handler validates the schema and rejects any file whose service URLs use non-http(s) schemes.
 
