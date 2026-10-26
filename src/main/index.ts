@@ -176,6 +176,33 @@ function getServiceDomains(type: string): string[] {
   }
 }
 
+const permissionPartitions = new Set<string>()
+const CALL_SERVICE_TYPES = ['messenger', 'whatsapp', 'telegram', 'teams', 'slack', 'instagram']
+// storage-access kept so Teams/Slack cross-subdomain login iframes keep cookie access.
+const BASE_PERMISSIONS = ['notifications', 'clipboard-sanitized-write', 'fullscreen', 'speaker-selection', 'storage-access', 'top-level-storage-access']
+
+function applyServicePermissions(partition: string, serviceType: string): void {
+  if (permissionPartitions.has(partition)) return
+  permissionPartitions.add(partition)
+  const domains = getServiceDomains(serviceType)
+  const isAllowed = (permission: string, url: string): boolean => {
+    let hostname: string
+    try {
+      hostname = new URL(url).hostname
+    } catch {
+      return false
+    }
+    if (!domains.some((d) => hostname === d || hostname.endsWith('.' + d))) return false
+    if (BASE_PERMISSIONS.includes(permission)) return true
+    return permission === 'media' && CALL_SERVICE_TYPES.includes(serviceType)
+  }
+  const ses = session.fromPartition(partition)
+  ses.setPermissionRequestHandler((wc, permission, callback, details) => {
+    callback(isAllowed(permission, details.requestingUrl || wc.getURL()))
+  })
+  ses.setPermissionCheckHandler((_wc, permission, requestingOrigin) => isAllowed(permission, requestingOrigin))
+}
+
 function flushLastVisited(): void {
   if (lastVisitedTimer) {
     clearTimeout(lastVisitedTimer)
@@ -717,6 +744,8 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
   const services = store.get('services') || []
   const service = services.find((s) => s.id === serviceId)
   if (!service) return null
+
+  applyServicePermissions(`persist:service-${service.id}`, service.type)
 
   const view = new WebContentsView({
     webPreferences: {
@@ -1786,11 +1815,18 @@ app.whenReady().then(() => {
       if (data.services) store.set('services', data.services);
       if (data.dnd) store.set('dnd', data.dnd);
       if (data.layout) store.set('layout', data.layout);
-      if (data.general) store.set('general', data.general);
+      if (data.general) {
+        const incoming = data.general as Record<string, unknown>;
+        const merged = { ...((store.get('general') || {}) as any) };
+        if (typeof incoming.closeToTray === 'boolean') merged.closeToTray = incoming.closeToTray;
+        if (typeof incoming.showTabLabels === 'boolean') merged.showTabLabels = incoming.showTabLabels;
+        store.set('general', merged);
+      }
 
       mainWindow.webContents.send('services-updated', store.get('services'));
       evaluateDndState();
 
+      flushLastVisited();
       app.relaunch();
       app.exit(0);
 
@@ -1802,6 +1838,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('clear-config', () => {
+    flushLastVisited();
     store.clear();
     app.relaunch();
     app.exit(0);
