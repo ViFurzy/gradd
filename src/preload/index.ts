@@ -4,19 +4,28 @@ import { electronAPI } from '@electron-toolkit/preload'
 // Custom APIs for renderer
 const api = {
   getLayoutMode: (): Promise<'sidebar' | 'tabs'> => ipcRenderer.invoke('get-layout-mode'),
-  setLayoutMode: (mode: 'sidebar' | 'tabs'): Promise<void> => ipcRenderer.invoke('set-layout-mode', mode),
+  setLayoutMode: (mode: 'sidebar' | 'tabs'): Promise<void> =>
+    ipcRenderer.invoke('set-layout-mode', mode),
   getServices: (): Promise<any[]> => ipcRenderer.invoke('get-services'),
   saveServices: (services: any[]): Promise<void> => ipcRenderer.invoke('save-services', services),
   switchService: (id: string | null): Promise<void> => ipcRenderer.invoke('switch-service', id),
-  updateViewBounds: (bounds: { x: number, y: number, width: number, height: number }): Promise<void> =>
-    ipcRenderer.invoke('update-view-bounds', bounds),
+  updateViewBounds: (bounds: {
+    x: number
+    y: number
+    width: number
+    height: number
+  }): Promise<void> => ipcRenderer.invoke('update-view-bounds', bounds),
   clearStorageData: (): Promise<void> => ipcRenderer.invoke('clear-storage-data'),
-  showServiceContextMenu: (id: string): Promise<void> => ipcRenderer.invoke('show-service-context-menu', id),
-  clearServiceStorageData: (id: string): Promise<void> => ipcRenderer.invoke('clear-service-storage-data', id),
+  showServiceContextMenu: (id: string): Promise<void> =>
+    ipcRenderer.invoke('show-service-context-menu', id),
+  clearServiceStorageData: (id: string): Promise<void> =>
+    ipcRenderer.invoke('clear-service-storage-data', id),
   onUnreadCountsUpdated: (callback: (data: any) => void): (() => void) => {
     const handler = (_event: unknown, data: any): void => callback(data)
     ipcRenderer.on('unread-counts-updated', handler)
-    return () => { ipcRenderer.removeListener('unread-counts-updated', handler) }
+    return () => {
+      ipcRenderer.removeListener('unread-counts-updated', handler)
+    }
   },
   updateTaskbarBadge: (dataUrl: string | null, description: string): Promise<void> =>
     ipcRenderer.invoke('update-taskbar-badge', dataUrl, description),
@@ -29,54 +38,76 @@ const api = {
   onDndStatusChanged: (callback: (active: boolean) => void): (() => void) => {
     const handler = (_event: unknown, active: any): void => callback(active)
     ipcRenderer.on('dnd-status-changed', handler)
-    return () => { ipcRenderer.removeListener('dnd-status-changed', handler) }
+    return () => {
+      ipcRenderer.removeListener('dnd-status-changed', handler)
+    }
   },
   onServicesUpdated: (callback: (services: any[]) => void): (() => void) => {
     const handler = (_event: unknown, services: any): void => callback(services)
     ipcRenderer.on('services-updated', handler)
-    return () => { ipcRenderer.removeListener('services-updated', handler) }
+    return () => {
+      ipcRenderer.removeListener('services-updated', handler)
+    }
   },
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
-  getActiveUserStats: (): Promise<{ dau: number; mau: number } | null> => ipcRenderer.invoke('get-active-user-stats'),
+  getActiveUserStats: (): Promise<{ dau: number; mau: number } | null> =>
+    ipcRenderer.invoke('get-active-user-stats'),
   getGeneralConfig: (): Promise<any> => ipcRenderer.invoke('get-general-config'),
-  setGeneralConfig: (config: any): Promise<void> => ipcRenderer.invoke('set-general-config', config),
-  exportConfig: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('export-config'),
-  importConfig: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('import-config'),
+  setGeneralConfig: (config: any): Promise<void> =>
+    ipcRenderer.invoke('set-general-config', config),
+  exportConfig: (): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('export-config'),
+  importConfig: (): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('import-config'),
   clearConfig: (): Promise<void> => ipcRenderer.invoke('clear-config'),
   checkForUpdates: (): Promise<void> => ipcRenderer.invoke('check-for-updates'),
   installUpdate: (): Promise<void> => ipcRenderer.invoke('install-update'),
   onUpdateChecking: (callback: () => void): (() => void) => {
     const handler = (): void => callback()
     ipcRenderer.on('update-checking', handler)
-    return () => { ipcRenderer.removeListener('update-checking', handler) }
+    return () => {
+      ipcRenderer.removeListener('update-checking', handler)
+    }
   },
   onUpdateAvailable: (callback: (info: any) => void): (() => void) => {
     const handler = (_e: unknown, info: any): void => callback(info)
     ipcRenderer.on('update-available', handler)
-    return () => { ipcRenderer.removeListener('update-available', handler) }
+    return () => {
+      ipcRenderer.removeListener('update-available', handler)
+    }
   },
   onUpdateNotAvailable: (callback: (info: any) => void): (() => void) => {
     const handler = (_e: unknown, info: any): void => callback(info)
     ipcRenderer.on('update-not-available', handler)
-    return () => { ipcRenderer.removeListener('update-not-available', handler) }
+    return () => {
+      ipcRenderer.removeListener('update-not-available', handler)
+    }
   },
   onUpdateDownloaded: (callback: (info: any) => void): (() => void) => {
     const handler = (_e: unknown, info: any): void => callback(info)
     ipcRenderer.on('update-downloaded', handler)
-    return () => { ipcRenderer.removeListener('update-downloaded', handler) }
+    return () => {
+      ipcRenderer.removeListener('update-downloaded', handler)
+    }
   },
   onUpdateError: (callback: (error: string) => void): (() => void) => {
     const handler = (_e: unknown, err: any): void => callback(err)
     ipcRenderer.on('update-error', handler)
-    return () => { ipcRenderer.removeListener('update-error', handler) }
+    return () => {
+      ipcRenderer.removeListener('update-error', handler)
+    }
   },
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('open-external', url),
-  setAppPin: (pin: string, currentPin?: string): Promise<boolean> => ipcRenderer.invoke('set-app-pin', pin, currentPin),
-  verifyAppPin: (pin: string): Promise<{ ok: boolean; retryAfterMs?: number }> => ipcRenderer.invoke('verify-app-pin', pin),
+  setAppPin: (pin: string, currentPin?: string): Promise<boolean> =>
+    ipcRenderer.invoke('set-app-pin', pin, currentPin),
+  verifyAppPin: (pin: string): Promise<{ ok: boolean; retryAfterMs?: number }> =>
+    ipcRenderer.invoke('verify-app-pin', pin),
   onLockApp: (callback: () => void): (() => void) => {
     const handler = (): void => callback()
     ipcRenderer.on('lock-app', handler)
-    return () => { ipcRenderer.removeListener('lock-app', handler) }
+    return () => {
+      ipcRenderer.removeListener('lock-app', handler)
+    }
   }
 }
 
@@ -104,30 +135,30 @@ if (typeof document !== 'undefined') {
         get: () => OriginalNotification.permission
       });
     })();
-  `;
+  `
 
   const injectScript = () => {
     try {
-      const script = document.createElement('script');
-      script.textContent = scriptContent;
-      document.documentElement.appendChild(script);
-      script.remove();
+      const script = document.createElement('script')
+      script.textContent = scriptContent
+      document.documentElement.appendChild(script)
+      script.remove()
     } catch (e) {
-      console.error('Failed to inject notification patch:', e);
+      console.error('Failed to inject notification patch:', e)
     }
-  };
+  }
 
   if (document.documentElement) {
-    injectScript();
+    injectScript()
   } else {
-    document.addEventListener('DOMContentLoaded', injectScript);
+    document.addEventListener('DOMContentLoaded', injectScript)
   }
 
   // Listen to custom DOM events sent from the website context
   window.addEventListener('gradd-notification-triggered', (e: any) => {
-    const { title, options } = e.detail;
-    ipcRenderer.invoke('show-native-notification', title, options?.body || '').catch(console.error);
-  });
+    const { title, options } = e.detail
+    ipcRenderer.invoke('show-native-notification', title, options?.body || '').catch(console.error)
+  })
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

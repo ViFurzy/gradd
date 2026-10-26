@@ -1,6 +1,25 @@
 import electron from 'electron'
-import type { BrowserWindow as BrowserWindowType, Tray as TrayType, WebContentsView as WebContentsViewType } from 'electron'
-const { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, WebContentsView, session, Notification, dialog, clipboard, powerMonitor, screen } = electron
+import type {
+  BrowserWindow as BrowserWindowType,
+  Tray as TrayType,
+  WebContentsView as WebContentsViewType
+} from 'electron'
+const {
+  app,
+  shell,
+  BrowserWindow,
+  ipcMain,
+  Tray,
+  Menu,
+  nativeImage,
+  WebContentsView,
+  session,
+  Notification,
+  dialog,
+  clipboard,
+  powerMonitor,
+  screen
+} = electron
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { readFileSync, writeFileSync } from 'fs'
@@ -66,7 +85,12 @@ let appLocked = false
 
 function activeViewBounds(): { x: number; y: number; width: number; height: number } {
   return appLocked
-    ? { x: -10000, y: -10000, width: contentBounds.width || 1280, height: contentBounds.height || 800 }
+    ? {
+        x: -10000,
+        y: -10000,
+        width: contentBounds.width || 1280,
+        height: contentBounds.height || 800
+      }
     : contentBounds
 }
 
@@ -110,7 +134,9 @@ function applyDndState(): void {
     try {
       const service = services.find((s) => s.id === id)
       const isMuted = dndActive || !!(service && service.muted)
-      console.log(`[Main] applyDndState: Service ${id} setAudioMuted(${isMuted}). service.muted=${service ? service.muted : undefined}`)
+      console.log(
+        `[Main] applyDndState: Service ${id} setAudioMuted(${isMuted}). service.muted=${service ? service.muted : undefined}`
+      )
       view.webContents.setAudioMuted(isMuted)
     } catch (error) {
       console.error('Failed to update audio muted state for service view:', error)
@@ -208,7 +234,14 @@ function checkPin(pin: unknown): { ok: boolean; retryAfterMs?: number } {
 const permissionPartitions = new Set<string>()
 const CALL_SERVICE_TYPES = ['messenger', 'whatsapp', 'telegram', 'teams', 'slack', 'instagram']
 // storage-access kept so Teams/Slack cross-subdomain login iframes keep cookie access.
-const BASE_PERMISSIONS = ['notifications', 'clipboard-sanitized-write', 'fullscreen', 'speaker-selection', 'storage-access', 'top-level-storage-access']
+const BASE_PERMISSIONS = [
+  'notifications',
+  'clipboard-sanitized-write',
+  'fullscreen',
+  'speaker-selection',
+  'storage-access',
+  'top-level-storage-access'
+]
 
 function applyServicePermissions(partition: string, serviceType: string): void {
   if (permissionPartitions.has(partition)) return
@@ -229,7 +262,9 @@ function applyServicePermissions(partition: string, serviceType: string): void {
   ses.setPermissionRequestHandler((wc, permission, callback, details) => {
     callback(isAllowed(permission, details.requestingUrl || wc.getURL()))
   })
-  ses.setPermissionCheckHandler((_wc, permission, requestingOrigin) => isAllowed(permission, requestingOrigin))
+  ses.setPermissionCheckHandler((_wc, permission, requestingOrigin) =>
+    isAllowed(permission, requestingOrigin)
+  )
 }
 
 function flushLastVisited(): void {
@@ -296,7 +331,11 @@ function handleUnreadCountChange(serviceId: string, count: number): void {
   }
 }
 
-async function scrapeUnreadCount(view: WebContentsViewType, type: string, currentCount = 0): Promise<number> {
+async function scrapeUnreadCount(
+  view: WebContentsViewType,
+  type: string,
+  currentCount = 0
+): Promise<number> {
   try {
     if (view.webContents.isDestroyed()) return 0
 
@@ -315,7 +354,9 @@ async function scrapeUnreadCount(view: WebContentsViewType, type: string, curren
 
     // Custom Slack mention scraper
     if (type === 'slack') {
-      const result = await view.webContents.executeJavaScript(`
+      const result = await view.webContents
+        .executeJavaScript(
+          `
         (() => {
           let count = 0;
           document.querySelectorAll('.c-mention_badge, .p-channel_sidebar__badge, .p-channel_sidebar__close_container .c-mention_badge').forEach(el => {
@@ -333,7 +374,9 @@ async function scrapeUnreadCount(view: WebContentsViewType, type: string, curren
           }
           return count;
         })()
-      `).catch(() => 0)
+      `
+        )
+        .catch(() => 0)
       return typeof result === 'number' ? result : 0
     }
 
@@ -346,7 +389,9 @@ async function scrapeUnreadCount(view: WebContentsViewType, type: string, curren
     // The visual distinction (colored = real unread, gray = muted/archived) is a
     // stable Telegram design contract we can rely on.
     if (type === 'telegram') {
-      const result = await view.webContents.executeJavaScript(`
+      const result = await view.webContents
+        .executeJavaScript(
+          `
         (() => {
           let total = 0;
           const root = document.querySelector('.chatlist, .chats-container') || document;
@@ -370,7 +415,9 @@ async function scrapeUnreadCount(view: WebContentsViewType, type: string, curren
           });
           return total;
         })()
-      `).catch(() => 0)
+      `
+        )
+        .catch(() => 0)
       return typeof result === 'number' ? result : 0
     }
 
@@ -385,7 +432,9 @@ async function scrapeUnreadCount(view: WebContentsViewType, type: string, curren
     //  3. rows/items whose aria-label mentions "unread" or "new"
     //  4. Color-based: Meta blue (~rgb(0,132,255)) small circle = unread dot per thread
     if (type === 'messenger') {
-      const result = await view.webContents.executeJavaScript(`
+      const result = await view.webContents
+        .executeJavaScript(
+          `
         (() => {
           // S1: aria-label with explicit numeric count
           let total = 0;
@@ -447,7 +496,9 @@ async function scrapeUnreadCount(view: WebContentsViewType, type: string, curren
           }
           return dotCount;
         })()
-      `).catch(() => 0)
+      `
+        )
+        .catch(() => 0)
       return typeof result === 'number' ? result : 0
     }
 
@@ -455,7 +506,9 @@ async function scrapeUnreadCount(view: WebContentsViewType, type: string, curren
     // WebContentsView may still be "focused" from Instagram's perspective, causing the
     // title to revert to plain "Instagram". Same four-strategy fallback as Messenger.
     if (type === 'instagram') {
-      const result = await view.webContents.executeJavaScript(`
+      const result = await view.webContents
+        .executeJavaScript(
+          `
         (() => {
           // S1: aria-label with explicit count
           let total = 0;
@@ -511,14 +564,18 @@ async function scrapeUnreadCount(view: WebContentsViewType, type: string, curren
           }
           return dotCount;
         })()
-      `).catch(() => 0)
+      `
+        )
+        .catch(() => 0)
       return typeof result === 'number' ? result : 0
     }
 
     // WhatsApp Web: CSS classnames are obfuscated. Use aria-label and Meta blue dot detection
     // (same DOM family as Messenger/Instagram — also a Meta product).
     if (type === 'whatsapp') {
-      const result = await view.webContents.executeJavaScript(`
+      const result = await view.webContents
+        .executeJavaScript(
+          `
         (() => {
           // S1: aria-label with explicit numeric count
           let total = 0;
@@ -578,7 +635,9 @@ async function scrapeUnreadCount(view: WebContentsViewType, type: string, curren
           }
           return dotCount;
         })()
-      `).catch(() => 0)
+      `
+        )
+        .catch(() => 0)
       return typeof result === 'number' ? result : 0
     }
 
@@ -586,7 +645,9 @@ async function scrapeUnreadCount(view: WebContentsViewType, type: string, curren
     // patterns, and data attributes. Title "(N) GG" format may not exist — DOM scraper is
     // the primary source.
     if (type === 'gadugadu') {
-      const result = await view.webContents.executeJavaScript(`
+      const result = await view.webContents
+        .executeJavaScript(
+          `
         (() => {
           // S1: aria-label with numeric count (English and Polish variants)
           let best = 0;
@@ -625,12 +686,16 @@ async function scrapeUnreadCount(view: WebContentsViewType, type: string, curren
 
           return 0;
         })()
-      `).catch(() => 0)
+      `
+        )
+        .catch(() => 0)
       return typeof result === 'number' ? result : 0
     }
 
     // Generic badge class scraper (covers custom or other apps with unread notification badges)
-    const genericCount = await view.webContents.executeJavaScript(`
+    const genericCount = await view.webContents
+      .executeJavaScript(
+        `
       (() => {
         let count = 0;
         const badges = document.querySelectorAll('[class*="badge"], [class*="unread"], [class*="notification"]');
@@ -645,9 +710,10 @@ async function scrapeUnreadCount(view: WebContentsViewType, type: string, curren
         });
         return count;
       })()
-    `).catch(() => 0)
+    `
+      )
+      .catch(() => 0)
     return typeof genericCount === 'number' ? genericCount : 0
-
   } catch (error) {
     return 0
   }
@@ -693,7 +759,9 @@ function recreateServiceView(serviceId: string): void {
       mainWindow.contentView.removeChildView(existingView)
       ;(existingView.webContents as any).destroy()
     }
-  } catch (_) { /* ignore */ }
+  } catch (_) {
+    /* ignore */
+  }
   serviceViews.delete(serviceId)
   serviceLastActive.delete(serviceId)
   serviceUnreads.delete(serviceId)
@@ -727,11 +795,15 @@ function unloadIdleServiceViews(): void {
         if (mainWindow) mainWindow.contentView.removeChildView(view)
         ;(view.webContents as any).destroy()
       }
-    } catch (_) { /* ignore */ }
+    } catch (_) {
+      /* ignore */
+    }
     serviceViews.delete(serviceId)
     serviceLastActive.delete(serviceId)
     serviceZeroStreak.delete(serviceId)
-    console.log(`[Main] Unloaded idle service view '${serviceId}' (inactive for ${Math.round((now - lastActive) / 1000)}s)`)
+    console.log(
+      `[Main] Unloaded idle service view '${serviceId}' (inactive for ${Math.round((now - lastActive) / 1000)}s)`
+    )
   }
 }
 
@@ -786,7 +858,12 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
   })
 
   // Override User-Agent to avoid browser check rejections
-  if (service.type === 'whatsapp' || service.type === 'instagram' || service.type === 'slack' || service.type === 'teams') {
+  if (
+    service.type === 'whatsapp' ||
+    service.type === 'instagram' ||
+    service.type === 'slack' ||
+    service.type === 'teams'
+  ) {
     view.webContents.setUserAgent(CHROME_UA)
   }
 
@@ -806,7 +883,9 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
       // Slack: workspace/app URLs → main view; link clicks → browser; auth popups (new-window) → in-partition
       if (service.type === 'slack') {
         if (hostname === 'slack.com' || hostname.endsWith('.slack.com')) {
-          view.webContents.loadURL(url).catch((err) => console.error('Failed to load Slack URL in view:', err))
+          view.webContents
+            .loadURL(url)
+            .catch((err) => console.error('Failed to load Slack URL in view:', err))
           return { action: 'deny' }
         }
         if (disposition === 'foreground-tab' || disposition === 'background-tab') {
@@ -824,9 +903,13 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
       }
 
       // Service domain routing: load own-domain URLs in the parent view
-      const domains = ['whatsapp', 'telegram', 'messenger'].includes(service.type) ? getServiceDomains(service.type) : null
+      const domains = ['whatsapp', 'telegram', 'messenger'].includes(service.type)
+        ? getServiceDomains(service.type)
+        : null
       if (domains && domains.some((d) => hostname === d || hostname.endsWith('.' + d))) {
-        view.webContents.loadURL(url).catch((err) => console.error('Failed to load service URL in view:', err))
+        view.webContents
+          .loadURL(url)
+          .catch((err) => console.error('Failed to load service URL in view:', err))
         return { action: 'deny' }
       }
 
@@ -838,9 +921,12 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
 
       // Remaining new-window calls: only allow in-partition for known SSO/OAuth providers
       const isSSOProvider =
-        hostname === 'accounts.google.com' || hostname.endsWith('.accounts.google.com') ||
-        hostname === 'login.microsoftonline.com' || hostname.endsWith('.login.microsoftonline.com') ||
-        hostname === 'okta.com' || hostname.endsWith('.okta.com') ||
+        hostname === 'accounts.google.com' ||
+        hostname.endsWith('.accounts.google.com') ||
+        hostname === 'login.microsoftonline.com' ||
+        hostname.endsWith('.login.microsoftonline.com') ||
+        hostname === 'okta.com' ||
+        hostname.endsWith('.okta.com') ||
         hostname === 'appleid.apple.com' ||
         hostname === 'github.com'
 
@@ -874,9 +960,9 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
           if (hostname === 'slack.com' || hostname.endsWith('.slack.com')) {
             const targetUrl = url
             childWindow.close()
-            view.webContents.loadURL(targetUrl).catch((err) =>
-              console.error('[Slack SSO] Failed to load post-auth URL:', err)
-            )
+            view.webContents
+              .loadURL(targetUrl)
+              .catch((err) => console.error('[Slack SSO] Failed to load post-auth URL:', err))
           }
         } catch {}
       })
@@ -906,16 +992,16 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
       const { hostname } = new URL(url)
       const allowedDomains = getServiceDomains(service.type)
       if (allowedDomains.length > 0) {
-        const isAllowed = allowedDomains.some(
-          (d) => hostname === d || hostname.endsWith('.' + d)
-        )
+        const isAllowed = allowedDomains.some((d) => hostname === d || hostname.endsWith('.' + d))
         if (!isAllowed) {
           event.preventDefault()
           // Google and Microsoft block OAuth inside WebContentsView — open as a standalone
           // BrowserWindow sharing the service's partition so the session cookie lands there.
           const isOAuthProvider =
-            hostname === 'accounts.google.com' || hostname.endsWith('.accounts.google.com') ||
-            hostname === 'login.microsoftonline.com' || hostname.endsWith('.login.microsoftonline.com')
+            hostname === 'accounts.google.com' ||
+            hostname.endsWith('.accounts.google.com') ||
+            hostname === 'login.microsoftonline.com' ||
+            hostname.endsWith('.login.microsoftonline.com')
           if (isOAuthProvider) {
             openOAuthPopup(url, serviceId, allowedDomains)
           } else {
@@ -946,13 +1032,15 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
       setTimeout(() => {
         const current = serviceUnreads.get(serviceId) || 0
         if (current === 0) return
-        scrapeUnreadCount(view, service.type, current).then((count) => {
-          if (count === 0) {
-            // DOM confirms zero — force-clear without waiting for the 2-streak
-            serviceZeroStreak.set(serviceId, 2)
-            handleUnreadCountChange(serviceId, 0)
-          }
-        }).catch(() => {})
+        scrapeUnreadCount(view, service.type, current)
+          .then((count) => {
+            if (count === 0) {
+              // DOM confirms zero — force-clear without waiting for the 2-streak
+              serviceZeroStreak.set(serviceId, 2)
+              handleUnreadCountChange(serviceId, 0)
+            }
+          })
+          .catch(() => {})
       }, 600)
     }
   })
@@ -968,7 +1056,9 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
   // Auto-recover crashed WebContentsViews by full recreation (reload/loadURL alone
   // cannot recover a crashed renderer — the view must be destroyed and recreated).
   view.webContents.on('render-process-gone', (_event, details) => {
-    console.warn(`[Main] Renderer process gone for service ${serviceId} (reason: ${details.reason}). Recreating view...`)
+    console.warn(
+      `[Main] Renderer process gone for service ${serviceId} (reason: ${details.reason}). Recreating view...`
+    )
     setTimeout(() => {
       // Guard: only recreate if this view is still the one in the map (not already replaced)
       if (serviceViews.get(serviceId) === view) {
@@ -995,9 +1085,9 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
         click: () => view.webContents.reload()
       },
       { type: 'separator' },
-      { label: 'Cut',        role: 'cut',       enabled: params.editFlags.canCut },
-      { label: 'Copy',       role: 'copy',      enabled: params.editFlags.canCopy },
-      { label: 'Paste',      role: 'paste',     enabled: params.editFlags.canPaste },
+      { label: 'Cut', role: 'cut', enabled: params.editFlags.canCut },
+      { label: 'Copy', role: 'copy', enabled: params.editFlags.canCopy },
+      { label: 'Paste', role: 'paste', enabled: params.editFlags.canPaste },
       { label: 'Select All', role: 'selectAll', enabled: params.editFlags.canSelectAll }
     ]
 
@@ -1025,7 +1115,9 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
   // message node is added and the user was already near the bottom.
   if (service.type === 'telegram') {
     view.webContents.on('did-finish-load', () => {
-      view.webContents.executeJavaScript(`
+      view.webContents
+        .executeJavaScript(
+          `
         (function() {
           if (window.__graddScrollFix) return;
           window.__graddScrollFix = true;
@@ -1048,8 +1140,10 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
 
           setTimeout(init, 1500);
         })();
-      `).catch(() => {});
-    });
+      `
+        )
+        .catch(() => {})
+    })
   }
 
   // Suppress the Windows USB security key dialog on services that don't need WebAuthn.
@@ -1058,7 +1152,9 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
   // executeJavaScript() runs in the page's main world and bypasses CSP entirely.
   view.webContents.on('did-finish-load', () => {
     if (service.type === 'slack') return
-    view.webContents.executeJavaScript(`
+    view.webContents
+      .executeJavaScript(
+        `
       (function() {
         if (window.__graddNoUsbKey) return;
         window.__graddNoUsbKey = true;
@@ -1083,16 +1179,24 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
           return orig(opts);
         };
       })();
-    `).catch(() => {});
-  });
+    `
+      )
+      .catch(() => {})
+  })
 
   // Apply initial mute state based on DND or per-service settings
   const isMuted = dndActive || !!service.muted
-  console.log(`[Main] getOrCreateView: Service ${serviceId} setAudioMuted(${isMuted}). dndActive=${dndActive}, service.muted=${service.muted}`)
+  console.log(
+    `[Main] getOrCreateView: Service ${serviceId} setAudioMuted(${isMuted}). dndActive=${dndActive}, service.muted=${service.muted}`
+  )
   view.webContents.setAudioMuted(isMuted)
 
   const lastVisited = store.get('lastVisited') || {}
-  const homeUrl = pendingLastVisited.get(serviceId) ?? lastVisited[serviceId] ?? defaultServices.find((s) => s.id === serviceId)?.url ?? service.url
+  const homeUrl =
+    pendingLastVisited.get(serviceId) ??
+    lastVisited[serviceId] ??
+    defaultServices.find((s) => s.id === serviceId)?.url ??
+    service.url
   view.webContents.loadURL(homeUrl).catch(console.error)
   serviceViews.set(serviceId, view)
   serviceLastActive.set(serviceId, Date.now())
@@ -1295,7 +1399,9 @@ function createWindow(): void {
       if (serviceId === activeServiceId) continue
       const lastActive = serviceLastActive.get(serviceId) ?? 0
       if (lastActive < hiddenAt) {
-        console.log(`[Main] Recreating stale service view '${serviceId}' after tray restore (last active: ${new Date(lastActive).toISOString()})`)
+        console.log(
+          `[Main] Recreating stale service view '${serviceId}' after tray restore (last active: ${new Date(lastActive).toISOString()})`
+        )
         recreateServiceView(serviceId)
       }
     }
@@ -1319,7 +1425,16 @@ function createTray(): void {
   updateTrayMenu()
 }
 
-const ALLOWED_SERVICE_TYPES = ['messenger', 'whatsapp', 'telegram', 'slack', 'instagram', 'gadugadu', 'linkedin', 'teams']
+const ALLOWED_SERVICE_TYPES = [
+  'messenger',
+  'whatsapp',
+  'telegram',
+  'slack',
+  'instagram',
+  'gadugadu',
+  'linkedin',
+  'teams'
+]
 
 function validateService(svc: unknown): string | null {
   if (!svc || typeof svc !== 'object') return 'Each service must be an object.'
@@ -1327,12 +1442,15 @@ function validateService(svc: unknown): string | null {
   if (typeof s.id !== 'string' || !s.id) return 'Service "id" must be a non-empty string.'
   if (typeof s.name !== 'string' || !s.name) return 'Service "name" must be a non-empty string.'
   if (typeof s.enabled !== 'boolean') return 'Service "enabled" must be a boolean.'
-  if (s.muted !== undefined && typeof s.muted !== 'boolean') return 'Service "muted" must be a boolean.'
-  if (!ALLOWED_SERVICE_TYPES.includes(s.type as string)) return `Service type "${s.type}" is not recognised.`
+  if (s.muted !== undefined && typeof s.muted !== 'boolean')
+    return 'Service "muted" must be a boolean.'
+  if (!ALLOWED_SERVICE_TYPES.includes(s.type as string))
+    return `Service type "${s.type}" is not recognised.`
   if (typeof s.url !== 'string') return 'Service "url" must be a string.'
   try {
     const parsed = new URL(s.url as string)
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return `Service URL "${s.url}" must use http or https.`
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
+      return `Service URL "${s.url}" must use http or https.`
   } catch {
     return `Service URL "${s.url}" is not a valid URL.`
   }
@@ -1344,8 +1462,10 @@ function validateDnd(dnd: unknown): string | null {
   const d = dnd as Record<string, unknown>
   if (typeof d.manualActive !== 'boolean') return '"dnd.manualActive" must be a boolean.'
   if (typeof d.scheduleEnabled !== 'boolean') return '"dnd.scheduleEnabled" must be a boolean.'
-  if (typeof d.startTime !== 'string' || !/^\d{2}:\d{2}$/.test(d.startTime as string)) return '"dnd.startTime" must be HH:MM format.'
-  if (typeof d.endTime !== 'string' || !/^\d{2}:\d{2}$/.test(d.endTime as string)) return '"dnd.endTime" must be HH:MM format.'
+  if (typeof d.startTime !== 'string' || !/^\d{2}:\d{2}$/.test(d.startTime as string))
+    return '"dnd.startTime" must be HH:MM format.'
+  if (typeof d.endTime !== 'string' || !/^\d{2}:\d{2}$/.test(d.endTime as string))
+    return '"dnd.endTime" must be HH:MM format.'
   return null
 }
 
@@ -1366,7 +1486,8 @@ function validateImportedConfig(data: unknown): { valid: boolean; reason?: strin
   const obj = data as Record<string, unknown>
 
   if (obj.services !== undefined) {
-    if (!Array.isArray(obj.services)) return { valid: false, reason: '"services" must be an array.' }
+    if (!Array.isArray(obj.services))
+      return { valid: false, reason: '"services" must be an array.' }
     for (const svc of obj.services) {
       const reason = validateService(svc)
       if (reason) return { valid: false, reason }
@@ -1379,7 +1500,8 @@ function validateImportedConfig(data: unknown): { valid: boolean; reason?: strin
   }
 
   if (obj.layout !== undefined) {
-    if (typeof obj.layout !== 'object' || Array.isArray(obj.layout)) return { valid: false, reason: '"layout" must be an object.' }
+    if (typeof obj.layout !== 'object' || Array.isArray(obj.layout))
+      return { valid: false, reason: '"layout" must be an object.' }
     const layout = obj.layout as Record<string, unknown>
     if (layout.mode !== undefined && layout.mode !== 'sidebar' && layout.mode !== 'tabs') {
       return { valid: false, reason: '"layout.mode" must be "sidebar" or "tabs".' }
@@ -1387,7 +1509,8 @@ function validateImportedConfig(data: unknown): { valid: boolean; reason?: strin
   }
 
   if (obj.general !== undefined) {
-    if (typeof obj.general !== 'object' || Array.isArray(obj.general)) return { valid: false, reason: '"general" must be an object.' }
+    if (typeof obj.general !== 'object' || Array.isArray(obj.general))
+      return { valid: false, reason: '"general" must be an object.' }
     const general = obj.general as Record<string, unknown>
     if (general.closeToTray !== undefined && typeof general.closeToTray !== 'boolean') {
       return { valid: false, reason: '"general.closeToTray" must be a boolean.' }
@@ -1475,7 +1598,9 @@ app.whenReady().then(() => {
               mainWindow.contentView.removeChildView(view)
             }
             ;(view.webContents as any).destroy()
-          } catch (_) { /* ignore */ }
+          } catch (_) {
+            /* ignore */
+          }
           serviceViews.delete(prev.id)
           serviceUnreads.delete(prev.id)
           serviceZeroStreak.delete(prev.id)
@@ -1486,7 +1611,11 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('switch-service', (_, id: string | null) => {
-    if (id !== null && (typeof id !== 'string' || !(store.get('services') || []).some((s) => s.id === id))) return
+    if (
+      id !== null &&
+      (typeof id !== 'string' || !(store.get('services') || []).some((s) => s.id === id))
+    )
+      return
     if (activeServiceId === id) return
 
     if (activeServiceId && mainWindow) {
@@ -1496,7 +1625,12 @@ app.whenReady().then(() => {
         // Move off-screen rather than removeChildView — keeps visibilityState = 'visible'
         // inside the embedded page so SPAs (especially Telegram Web) don't suspend their
         // rendering layer and go blank when the tab is deselected.
-        activeView.setBounds({ x: -10000, y: -10000, width: contentBounds.width || 1280, height: contentBounds.height || 800 })
+        activeView.setBounds({
+          x: -10000,
+          y: -10000,
+          width: contentBounds.width || 1280,
+          height: contentBounds.height || 800
+        })
       }
     }
 
@@ -1517,22 +1651,30 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('update-view-bounds', (_, bounds: { x: number, y: number, width: number, height: number }) => {
-    if (!bounds || typeof bounds !== 'object' || ![bounds.x, bounds.y, bounds.width, bounds.height].every(Number.isFinite)) return
-    const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n))
-    contentBounds = {
-      x: clamp(bounds.x, -20000, 20000),
-      y: clamp(bounds.y, -20000, 20000),
-      width: clamp(bounds.width, 0, 20000),
-      height: clamp(bounds.height, 0, 20000)
-    }
-    if (activeServiceId) {
-      const activeView = serviceViews.get(activeServiceId)
-      if (activeView) {
-        activeView.setBounds(activeViewBounds())
+  ipcMain.handle(
+    'update-view-bounds',
+    (_, bounds: { x: number; y: number; width: number; height: number }) => {
+      if (
+        !bounds ||
+        typeof bounds !== 'object' ||
+        ![bounds.x, bounds.y, bounds.width, bounds.height].every(Number.isFinite)
+      )
+        return
+      const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n))
+      contentBounds = {
+        x: clamp(bounds.x, -20000, 20000),
+        y: clamp(bounds.y, -20000, 20000),
+        width: clamp(bounds.width, 0, 20000),
+        height: clamp(bounds.height, 0, 20000)
+      }
+      if (activeServiceId) {
+        const activeView = serviceViews.get(activeServiceId)
+        if (activeView) {
+          activeView.setBounds(activeViewBounds())
+        }
       }
     }
-  })
+  )
 
   ipcMain.handle('clear-storage-data', async () => {
     try {
@@ -1540,7 +1682,7 @@ app.whenReady().then(() => {
       for (const service of services) {
         const ses = session.fromPartition(`persist:service-${service.id}`)
         await ses.clearStorageData()
-        
+
         // Reset URL to default
         const defaultService = defaultServices.find((s) => s.id === service.id)
         if (defaultService) {
@@ -1642,7 +1784,12 @@ app.whenReady().then(() => {
     if (!dataUrl) {
       win.setOverlayIcon(null, '')
     } else {
-      if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png;base64,') || dataUrl.length > 20_000) return
+      if (
+        typeof dataUrl !== 'string' ||
+        !dataUrl.startsWith('data:image/png;base64,') ||
+        dataUrl.length > 20_000
+      )
+        return
       try {
         const img = nativeImage.createFromDataURL(dataUrl)
         win.setOverlayIcon(img, String(description ?? '').slice(0, 200))
@@ -1664,7 +1811,10 @@ app.whenReady().then(() => {
     if (!dndActive) {
       try {
         const notif = new Notification({ title, body, silent: false })
-        notif.on('click', () => { mainWindow?.show(); mainWindow?.focus() })
+        notif.on('click', () => {
+          mainWindow?.show()
+          mainWindow?.focus()
+        })
         notif.show()
       } catch {}
     }
@@ -1674,9 +1824,11 @@ app.whenReady().then(() => {
         const services = store.get('services') || []
         const service = services.find((s) => s.id === serviceId)
         if (service) {
-          scrapeUnreadCount(view, service.type, serviceUnreads.get(serviceId) || 0).then((count) => {
-            handleUnreadCountChange(serviceId, count)
-          }).catch(() => {})
+          scrapeUnreadCount(view, service.type, serviceUnreads.get(serviceId) || 0)
+            .then((count) => {
+              handleUnreadCountChange(serviceId, count)
+            })
+            .catch(() => {})
         }
         break
       }
@@ -1773,28 +1925,28 @@ app.whenReady().then(() => {
   })
 
   // --- Auto Updater Setup ---
-  autoUpdater.autoDownload = false; // We'll trigger download manually if user chooses
-  
+  autoUpdater.autoDownload = false // We'll trigger download manually if user chooses
+
   autoUpdater.on('checking-for-update', () => {
-    mainWindow?.webContents.send('update-checking');
-  });
+    mainWindow?.webContents.send('update-checking')
+  })
 
   autoUpdater.on('update-available', (info) => {
-    mainWindow?.webContents.send('update-available', info);
+    mainWindow?.webContents.send('update-available', info)
     // Automatically start download when available
-    autoUpdater.downloadUpdate();
-  });
+    autoUpdater.downloadUpdate()
+  })
 
   autoUpdater.on('update-not-available', (info) => {
-    mainWindow?.webContents.send('update-not-available', info);
-  });
+    mainWindow?.webContents.send('update-not-available', info)
+  })
 
   autoUpdater.on('error', (err) => {
-    mainWindow?.webContents.send('update-error', err.message);
-  });
+    mainWindow?.webContents.send('update-error', err.message)
+  })
 
   autoUpdater.on('update-downloaded', (info) => {
-    mainWindow?.webContents.send('update-downloaded', info);
+    mainWindow?.webContents.send('update-downloaded', info)
 
     // Notify the user via a native OS toast — works even if Settings panel isn't open
     try {
@@ -1808,40 +1960,40 @@ app.whenReady().then(() => {
     } catch (e) {
       console.error('[Updater] Failed to show update notification:', e)
     }
-  });
+  })
 
   ipcMain.handle('check-for-updates', async () => {
     if (!isDev) {
       try {
-        await autoUpdater.checkForUpdates();
+        await autoUpdater.checkForUpdates()
       } catch (err) {
-        console.error('Failed to check for updates', err);
-        mainWindow?.webContents.send('update-error', String(err));
+        console.error('Failed to check for updates', err)
+        mainWindow?.webContents.send('update-error', String(err))
       }
     } else {
       // Mock logic for dev environment
-      mainWindow?.webContents.send('update-checking');
+      mainWindow?.webContents.send('update-checking')
       setTimeout(() => {
-        mainWindow?.webContents.send('update-not-available', { version: app.getVersion() });
-      }, 1500);
+        mainWindow?.webContents.send('update-not-available', { version: app.getVersion() })
+      }, 1500)
     }
-  });
+  })
 
   ipcMain.handle('install-update', () => {
-    autoUpdater.quitAndInstall();
-  });
+    autoUpdater.quitAndInstall()
+  })
   // --------------------------
 
   // --- Export / Import Setup ---
   ipcMain.handle('export-config', async () => {
-    if (!mainWindow) return { success: false, error: 'No main window' };
+    if (!mainWindow) return { success: false, error: 'No main window' }
     const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
       title: 'Export Gradd Configuration',
       defaultPath: 'gradd-config.json',
       filters: [{ name: 'JSON Files', extensions: ['json'] }]
-    });
+    })
 
-    if (canceled || !filePath) return { success: false };
+    if (canceled || !filePath) return { success: false }
 
     try {
       const dataToExport = {
@@ -1849,110 +2001,111 @@ app.whenReady().then(() => {
         dnd: store.get('dnd'),
         layout: store.get('layout'),
         general: store.get('general')
-      };
-      writeFileSync(filePath, JSON.stringify(dataToExport, null, 2), 'utf-8');
-      return { success: true };
+      }
+      writeFileSync(filePath, JSON.stringify(dataToExport, null, 2), 'utf-8')
+      return { success: true }
     } catch (err) {
-      console.error('Export failed:', err);
-      return { success: false, error: String(err) };
+      console.error('Export failed:', err)
+      return { success: false, error: String(err) }
     }
-  });
+  })
 
   ipcMain.handle('import-config', async () => {
-    if (!mainWindow) return { success: false, error: 'No main window' };
+    if (!mainWindow) return { success: false, error: 'No main window' }
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
       title: 'Import Gradd Configuration',
       filters: [{ name: 'JSON Files', extensions: ['json'] }],
       properties: ['openFile']
-    });
+    })
 
-    if (canceled || filePaths.length === 0) return { success: false };
+    if (canceled || filePaths.length === 0) return { success: false }
 
     try {
-      const rawData = readFileSync(filePaths[0], 'utf-8');
-      let parsedData: unknown;
+      const rawData = readFileSync(filePaths[0], 'utf-8')
+      let parsedData: unknown
       try {
-        parsedData = JSON.parse(rawData);
+        parsedData = JSON.parse(rawData)
       } catch {
-        return { success: false, error: 'File is not valid JSON.' };
+        return { success: false, error: 'File is not valid JSON.' }
       }
 
       // Reject anything that doesn't match the expected config shape.
       // Without this check, a crafted file could inject arbitrary service URLs
       // that would be silently loaded in WebContentsViews after relaunch.
-      const validation = validateImportedConfig(parsedData);
+      const validation = validateImportedConfig(parsedData)
       if (!validation.valid) {
-        console.error('Import rejected — schema validation failed:', validation.reason);
-        return { success: false, error: `Invalid configuration file: ${validation.reason}` };
+        console.error('Import rejected — schema validation failed:', validation.reason)
+        return { success: false, error: `Invalid configuration file: ${validation.reason}` }
       }
 
-      const data = parsedData as Record<string, unknown>;
-      if (data.services) store.set('services', (data.services as any[]).map(sanitizeService));
-      if (data.dnd) store.set('dnd', data.dnd);
-      if (data.layout) store.set('layout', data.layout);
+      const data = parsedData as Record<string, unknown>
+      if (data.services) store.set('services', (data.services as any[]).map(sanitizeService))
+      if (data.dnd) store.set('dnd', data.dnd)
+      if (data.layout) store.set('layout', data.layout)
       if (data.general) {
-        const incoming = data.general as Record<string, unknown>;
-        const merged = { ...((store.get('general') || {}) as any) };
-        if (typeof incoming.closeToTray === 'boolean') merged.closeToTray = incoming.closeToTray;
-        if (typeof incoming.showTabLabels === 'boolean') merged.showTabLabels = incoming.showTabLabels;
-        store.set('general', merged);
+        const incoming = data.general as Record<string, unknown>
+        const merged = { ...((store.get('general') || {}) as any) }
+        if (typeof incoming.closeToTray === 'boolean') merged.closeToTray = incoming.closeToTray
+        if (typeof incoming.showTabLabels === 'boolean')
+          merged.showTabLabels = incoming.showTabLabels
+        store.set('general', merged)
       }
 
-      mainWindow.webContents.send('services-updated', store.get('services'));
-      evaluateDndState();
+      mainWindow.webContents.send('services-updated', store.get('services'))
+      evaluateDndState()
 
-      flushLastVisited();
-      app.relaunch();
-      app.exit(0);
+      flushLastVisited()
+      app.relaunch()
+      app.exit(0)
 
-      return { success: true };
+      return { success: true }
     } catch (err) {
-      console.error('Import failed:', err);
-      return { success: false, error: String(err) };
+      console.error('Import failed:', err)
+      return { success: false, error: String(err) }
     }
-  });
+  })
 
   ipcMain.handle('clear-config', () => {
-    flushLastVisited();
-    store.clear();
-    app.relaunch();
-    app.exit(0);
-  });
-  
+    flushLastVisited()
+    store.clear()
+    app.relaunch()
+    app.exit(0)
+  })
+
   // --- App Lock ---
   ipcMain.handle('set-app-pin', (_, pin: unknown, currentPin?: unknown) => {
     // Format errors must not burn lockout attempts, so validate before checkPin.
-    if (typeof pin !== 'string' || (pin !== '' && !/^\d{4}$/.test(pin))) return false;
-    if (store.get('general')?.appLockPin && !checkPin(currentPin).ok) return false;
+    if (typeof pin !== 'string' || (pin !== '' && !/^\d{4}$/.test(pin))) return false
+    if (store.get('general')?.appLockPin && !checkPin(currentPin).ok) return false
     // Re-read: checkPin may have migrated a legacy PIN
-    const general = (store.get('general') || {}) as any;
+    const general = (store.get('general') || {}) as any
     if (!pin) {
-      delete general.appLockPin;
-      store.set('general', general);
-      appLocked = false;
-      return true;
+      delete general.appLockPin
+      store.set('general', general)
+      appLocked = false
+      return true
     }
-    general.appLockPin = hashPin(pin);
-    store.set('general', general);
-    return true;
-  });
+    general.appLockPin = hashPin(pin)
+    store.set('general', general)
+    return true
+  })
 
   ipcMain.handle('verify-app-pin', (_, pin: unknown) => {
-    if (!store.get('general')?.appLockPin) return { ok: true };
-    const result = checkPin(pin);
-    if (!result.ok) return result;
+    if (!store.get('general')?.appLockPin) return { ok: true }
+    const result = checkPin(pin)
+    if (!result.ok) return result
     // Unlock lives here (not in a separate IPC) so the renderer can't unlock without the PIN
-    appLocked = false;
+    appLocked = false
     if (activeServiceId) {
-      const view = serviceViews.get(activeServiceId);
-      if (view && !view.webContents.isDestroyed()) view.setBounds(contentBounds);
+      const view = serviceViews.get(activeServiceId)
+      if (view && !view.webContents.isDestroyed()) view.setBounds(contentBounds)
     }
-    return { ok: true };
-  });
+    return { ok: true }
+  })
 
-  powerMonitor.on('lock-screen', lockApp);
+  powerMonitor.on('lock-screen', lockApp)
 
-  powerMonitor.on('suspend', lockApp);
+  powerMonitor.on('suspend', lockApp)
 
   const refreshActiveViewBounds = (): void => {
     if (!activeServiceId) return

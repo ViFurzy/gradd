@@ -62,7 +62,7 @@ function App(): React.JSX.Element {
       reorderServices: s.reorderServices,
       generalConfig: s.generalConfig,
       isLocked: s.isLocked,
-      setLocked: s.setLocked,
+      setLocked: s.setLocked
     }))
   )
   const [hoveredToggle, setHoveredToggle] = useState(false)
@@ -126,7 +126,7 @@ function App(): React.JSX.Element {
       canvas.width = 16
       canvas.height = 16
       const ctx = canvas.getContext('2d')
-      
+
       if (ctx) {
         // Red badge background circle
         ctx.fillStyle = '#e5534b'
@@ -224,14 +224,18 @@ function App(): React.JSX.Element {
   return (
     <div className="w-screen h-screen flex flex-col select-none bg-dominant text-text-primary relative overflow-hidden">
       {isLocked && <LockScreen />}
-      
+
       {/* 32px custom titlebar drag region */}
       <header
         onDoubleClick={() => window.api.doubleClickHeader()}
         className="h-8 min-h-8 bg-secondary border-b border-surface-border flex items-center justify-between px-4 drag"
       >
         <div className="flex items-center gap-2">
-          <img src={logoImg} className="w-3.5 h-3.5 scale-110 object-contain select-none pointer-events-none" alt="" />
+          <img
+            src={logoImg}
+            className="w-3.5 h-3.5 scale-110 object-contain select-none pointer-events-none"
+            alt=""
+          />
           <span className="text-[11px] font-semibold text-text-muted leading-[1.3]">Gradd</span>
           {isDndActive && (
             <div className="flex items-center gap-1 bg-accent/20 border border-accent/30 text-accent px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold tracking-wide animate-pulse">
@@ -302,15 +306,17 @@ function App(): React.JSX.Element {
                         onDragOver={(e) => {
                           e.preventDefault()
                           if (draggedServiceId === null || draggedServiceId === service.id) return
-                          
-                          const draggedIdx = enabledServices.findIndex((s) => s.id === draggedServiceId)
+
+                          const draggedIdx = enabledServices.findIndex(
+                            (s) => s.id === draggedServiceId
+                          )
                           const hoverIdx = index
                           if (draggedIdx === -1 || hoverIdx === draggedIdx) return
-                          
+
                           const updated = [...enabledServices]
                           const [draggedItem] = updated.splice(draggedIdx, 1)
                           updated.splice(hoverIdx, 0, draggedItem)
-                          
+
                           dragMovedRef.current = true
                           reorderServices(updated)
                         }}
@@ -421,7 +427,11 @@ function App(): React.JSX.Element {
                   }`}
                   title="Services Directory"
                 >
-                  <img src={logoImg} className="w-[22px] h-[22px] object-contain select-none pointer-events-none" alt="" />
+                  <img
+                    src={logoImg}
+                    className="w-[22px] h-[22px] object-contain select-none pointer-events-none"
+                    alt=""
+                  />
                 </button>
 
                 {/* Vertical Separator */}
@@ -450,15 +460,17 @@ function App(): React.JSX.Element {
                         onDragOver={(e) => {
                           e.preventDefault()
                           if (draggedServiceId === null || draggedServiceId === service.id) return
-                          
-                          const draggedIdx = enabledServices.findIndex((s) => s.id === draggedServiceId)
+
+                          const draggedIdx = enabledServices.findIndex(
+                            (s) => s.id === draggedServiceId
+                          )
                           const hoverIdx = index
                           if (draggedIdx === -1 || hoverIdx === draggedIdx) return
-                          
+
                           const updated = [...enabledServices]
                           const [draggedItem] = updated.splice(draggedIdx, 1)
                           updated.splice(hoverIdx, 0, draggedItem)
-                          
+
                           dragMovedRef.current = true
                           reorderServices(updated)
                         }}
@@ -475,7 +487,11 @@ function App(): React.JSX.Element {
                           <span className="text-xs font-normal leading-[1.4]">{service.name}</span>
                         )}
                         {service.muted && (
-                          <SpeakerSlash size={12} weight="bold" className="text-[#e5534b] flex-shrink-0" />
+                          <SpeakerSlash
+                            size={12}
+                            weight="bold"
+                            className="text-[#e5534b] flex-shrink-0"
+                          />
                         )}
                         {/* Unread badge */}
                         {service.unreadCount && service.unreadCount > 0 && !service.muted ? (
@@ -543,7 +559,14 @@ function App(): React.JSX.Element {
 }
 
 function DirectoryDashboard(): React.JSX.Element {
-  const { services, toggleService, selectService, toggleMuteService } = useLayoutStore(useShallow((s) => ({ services: s.services, toggleService: s.toggleService, selectService: s.selectService, toggleMuteService: s.toggleMuteService })))
+  const { services, toggleService, selectService, toggleMuteService } = useLayoutStore(
+    useShallow((s) => ({
+      services: s.services,
+      toggleService: s.toggleService,
+      selectService: s.selectService,
+      toggleMuteService: s.toggleMuteService
+    }))
+  )
   const [clearingServiceIds, setClearingServiceIds] = useState<Record<string, boolean>>({})
 
   const handleClearService = async (serviceId: string, name: string): Promise<void> => {
@@ -590,7 +613,11 @@ function DirectoryDashboard(): React.JSX.Element {
   return (
     <div className="w-full max-w-4xl px-8 py-6 h-full overflow-y-auto flex flex-col justify-start select-none content-area no-scrollbar">
       <div className="mb-8 border-b border-surface-border pb-4 flex items-center gap-4">
-        <img src={logoImg} className="w-12 h-12 object-contain select-none pointer-events-none" alt="" />
+        <img
+          src={logoImg}
+          className="w-12 h-12 object-contain select-none pointer-events-none"
+          alt=""
+        />
         <div>
           <h1 className="text-xl font-semibold text-text-primary leading-[1.2] mb-1">
             Services Directory
@@ -602,93 +629,115 @@ function DirectoryDashboard(): React.JSX.Element {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {services.filter((s) => s.type !== 'teams').map((service) => {
-          const isEnabled = service.enabled
-          const isClearing = clearingServiceIds[service.id]
-          return (
-            <div
-              key={service.id}
-              className="bg-secondary border border-surface-border rounded-lg p-4 flex items-center justify-between hover:border-text-muted/30 transition-all duration-150"
-            >
-              <div className="flex items-center gap-4">
-                <div className="p-2.5 bg-dominant rounded-md flex items-center justify-center">
-                  {getDashboardIcon(service.type)}
+        {services
+          .filter((s) => s.type !== 'teams')
+          .map((service) => {
+            const isEnabled = service.enabled
+            const isClearing = clearingServiceIds[service.id]
+            return (
+              <div
+                key={service.id}
+                className="bg-secondary border border-surface-border rounded-lg p-4 flex items-center justify-between hover:border-text-muted/30 transition-all duration-150"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="p-2.5 bg-dominant rounded-md flex items-center justify-center">
+                    {getDashboardIcon(service.type)}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-text-primary leading-[1.2]">
+                      {service.name}
+                    </h3>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-text-primary leading-[1.2]">
-                    {service.name}
-                  </h3>
-                </div>
-              </div>
 
-              <div className="flex items-center gap-3">
-                {isEnabled && (
-                  <button
-                    onClick={() => selectService(service.id)}
-                    className="no-drag px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer"
-                  >
-                    Open
-                  </button>
-                )}
-
-                {/* Custom toggle switch */}
-                <button
-                  onClick={() => toggleService(service.id)}
-                  className={`no-drag relative w-10 h-6 rounded-full transition-colors duration-150 cursor-pointer focus:outline-none ${
-                    isEnabled ? 'bg-accent' : 'bg-dominant border border-surface-border'
-                  }`}
-                  aria-label={`Toggle ${service.name}`}
-                >
-                  <div
-                    className={`absolute top-[3px] left-[3px] w-4.5 h-4.5 rounded-full bg-text-primary shadow transform transition-transform duration-150 ${
-                      isEnabled ? 'translate-x-4' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-
-                {/* Mute Toggle Button */}
-                <button
-                  onClick={() => toggleMuteService(service.id)}
-                  className="no-drag p-1.5 rounded transition-all duration-150 cursor-pointer focus:outline-none text-text-muted hover:text-accent hover:bg-hover-surface"
-                  title={service.muted ? `Unmute ${service.name}` : `Mute ${service.name}`}
-                  aria-label={service.muted ? `Unmute ${service.name}` : `Mute ${service.name}`}
-                >
-                  {service.muted ? (
-                    <SpeakerSlash size={16} weight="bold" className="text-[#e5534b]" />
-                  ) : (
-                    <SpeakerHigh size={16} weight="bold" />
+                <div className="flex items-center gap-3">
+                  {isEnabled && (
+                    <button
+                      onClick={() => selectService(service.id)}
+                      className="no-drag px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer"
+                    >
+                      Open
+                    </button>
                   )}
-                </button>
 
-                {/* Trash/Clear cache button */}
-                <button
-                  onClick={() => handleClearService(service.id, service.name)}
-                  disabled={isClearing}
-                  className={`no-drag p-1.5 rounded transition-all duration-150 cursor-pointer focus:outline-none ${
-                    isClearing
-                      ? 'text-text-muted bg-hover-surface cursor-not-allowed animate-pulse'
-                      : 'text-text-muted hover:text-[#e5534b] hover:bg-[#e5534b]/10 bg-transparent'
-                  }`}
-                  title={`Clear cache & session for ${service.name}`}
-                  aria-label={`Clear cache & session for ${service.name}`}
-                >
-                  <Trash size={16} weight="bold" />
-                </button>
+                  {/* Custom toggle switch */}
+                  <button
+                    onClick={() => toggleService(service.id)}
+                    className={`no-drag relative w-10 h-6 rounded-full transition-colors duration-150 cursor-pointer focus:outline-none ${
+                      isEnabled ? 'bg-accent' : 'bg-dominant border border-surface-border'
+                    }`}
+                    aria-label={`Toggle ${service.name}`}
+                  >
+                    <div
+                      className={`absolute top-[3px] left-[3px] w-4.5 h-4.5 rounded-full bg-text-primary shadow transform transition-transform duration-150 ${
+                        isEnabled ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+
+                  {/* Mute Toggle Button */}
+                  <button
+                    onClick={() => toggleMuteService(service.id)}
+                    className="no-drag p-1.5 rounded transition-all duration-150 cursor-pointer focus:outline-none text-text-muted hover:text-accent hover:bg-hover-surface"
+                    title={service.muted ? `Unmute ${service.name}` : `Mute ${service.name}`}
+                    aria-label={service.muted ? `Unmute ${service.name}` : `Mute ${service.name}`}
+                  >
+                    {service.muted ? (
+                      <SpeakerSlash size={16} weight="bold" className="text-[#e5534b]" />
+                    ) : (
+                      <SpeakerHigh size={16} weight="bold" />
+                    )}
+                  </button>
+
+                  {/* Trash/Clear cache button */}
+                  <button
+                    onClick={() => handleClearService(service.id, service.name)}
+                    disabled={isClearing}
+                    className={`no-drag p-1.5 rounded transition-all duration-150 cursor-pointer focus:outline-none ${
+                      isClearing
+                        ? 'text-text-muted bg-hover-surface cursor-not-allowed animate-pulse'
+                        : 'text-text-muted hover:text-[#e5534b] hover:bg-[#e5534b]/10 bg-transparent'
+                    }`}
+                    title={`Clear cache & session for ${service.name}`}
+                    aria-label={`Clear cache & session for ${service.name}`}
+                  >
+                    <Trash size={16} weight="bold" />
+                  </button>
+                </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
       </div>
     </div>
   )
 }
 
 function SettingsPanel(): React.JSX.Element {
-  const { dndConfig, isDndActive, updateDndConfig, generalConfig, updateGeneralConfig, layoutMode, setAppPin } = useLayoutStore(useShallow((s) => ({ dndConfig: s.dndConfig, isDndActive: s.isDndActive, updateDndConfig: s.updateDndConfig, generalConfig: s.generalConfig, updateGeneralConfig: s.updateGeneralConfig, layoutMode: s.layoutMode, setAppPin: s.setAppPin })))
+  const {
+    dndConfig,
+    isDndActive,
+    updateDndConfig,
+    generalConfig,
+    updateGeneralConfig,
+    layoutMode,
+    setAppPin
+  } = useLayoutStore(
+    useShallow((s) => ({
+      dndConfig: s.dndConfig,
+      isDndActive: s.isDndActive,
+      updateDndConfig: s.updateDndConfig,
+      generalConfig: s.generalConfig,
+      updateGeneralConfig: s.updateGeneralConfig,
+      layoutMode: s.layoutMode,
+      setAppPin: s.setAppPin
+    }))
+  )
   const [clearingState, setClearingState] = useState<'idle' | 'clearing' | 'success'>('idle')
   const [resetConfirming, setResetConfirming] = useState(false)
   const [appVersion, setAppVersion] = useState<string>('0.0.0')
-  const [checkingState, setCheckingState] = useState<'idle' | 'checking' | 'up-to-date' | 'available' | 'downloaded' | 'error'>('idle')
+  const [checkingState, setCheckingState] = useState<
+    'idle' | 'checking' | 'up-to-date' | 'available' | 'downloaded' | 'error'
+  >('idle')
   const [updateError, setUpdateError] = useState<string>('')
   const [stats, setStats] = useState<{ dau: number; mau: number } | null>(null)
   const [statsError, setStatsError] = useState<string>('')
@@ -711,17 +760,27 @@ function SettingsPanel(): React.JSX.Element {
       setPinError('Enter your current 4-digit PIN.')
       return
     }
-    const ok = await setAppPin(pinMode === 'remove' ? '' : pinNew, pinMode === 'set' ? undefined : pinCurrent)
+    const ok = await setAppPin(
+      pinMode === 'remove' ? '' : pinNew,
+      pinMode === 'set' ? undefined : pinCurrent
+    )
     if (ok) closePinForm()
-    else setPinError(pinMode === 'set' ? 'Could not set PIN.' : 'Current PIN is incorrect, or too many attempts. Try again later.')
+    else
+      setPinError(
+        pinMode === 'set'
+          ? 'Could not set PIN.'
+          : 'Current PIN is incorrect, or too many attempts. Try again later.'
+      )
   }
 
   useEffect(() => {
-    window.api.getAppVersion()
+    window.api
+      .getAppVersion()
       .then((v) => setAppVersion(v))
       .catch((err) => console.error('Failed to get app version:', err))
 
-    window.api.getActiveUserStats()
+    window.api
+      .getActiveUserStats()
       .then(setStats)
       .catch((err) => setStatsError(err.message))
 
@@ -766,7 +825,11 @@ function SettingsPanel(): React.JSX.Element {
   return (
     <div className="w-full max-w-4xl px-8 py-6 h-full overflow-y-auto flex flex-col justify-start select-none content-area no-scrollbar">
       <div className="mb-8 border-b border-surface-border pb-4 flex items-center gap-4">
-        <img src={logoImg} className="w-12 h-12 object-contain select-none pointer-events-none" alt="" />
+        <img
+          src={logoImg}
+          className="w-12 h-12 object-contain select-none pointer-events-none"
+          alt=""
+        />
         <div>
           <h1 className="text-xl font-semibold text-text-primary leading-[1.2] mb-1">Settings</h1>
           <p className="text-sm font-normal text-text-muted leading-[1.5]">
@@ -776,8 +839,6 @@ function SettingsPanel(): React.JSX.Element {
       </div>
 
       <div className="flex flex-col gap-6">
-
-
         {/* Section 1: Behavior */}
         <section className="bg-secondary border border-surface-border rounded-lg p-5 flex flex-col gap-4">
           <div className="flex items-center gap-3">
@@ -794,14 +855,16 @@ function SettingsPanel(): React.JSX.Element {
                 Keep running in background
               </h3>
               <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
-                When enabled, closing the window will minimize Gradd to the system tray.
-                When disabled, closing the window will fully quit the app.
+                When enabled, closing the window will minimize Gradd to the system tray. When
+                disabled, closing the window will fully quit the app.
               </p>
             </div>
             <button
               onClick={() => updateGeneralConfig({ closeToTray: !generalConfig?.closeToTray })}
               className={`no-drag relative w-10 h-6 rounded-full transition-colors duration-150 cursor-pointer focus:outline-none ${
-                generalConfig?.closeToTray !== false ? 'bg-accent' : 'bg-dominant border border-surface-border'
+                generalConfig?.closeToTray !== false
+                  ? 'bg-accent'
+                  : 'bg-dominant border border-surface-border'
               }`}
             >
               <div
@@ -813,7 +876,9 @@ function SettingsPanel(): React.JSX.Element {
           </div>
 
           {/* Show Tab Labels Toggle */}
-          <div className={`flex items-center justify-between border-t border-surface-border/50 pt-4 mt-1 ${layoutMode !== 'tabs' ? 'opacity-40 pointer-events-none' : ''}`}>
+          <div
+            className={`flex items-center justify-between border-t border-surface-border/50 pt-4 mt-1 ${layoutMode !== 'tabs' ? 'opacity-40 pointer-events-none' : ''}`}
+          >
             <div>
               <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">
                 Show service names in top bar
@@ -821,13 +886,21 @@ function SettingsPanel(): React.JSX.Element {
               <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
                 When enabled, each tab in the top bar shows the service name next to its icon.
                 Disable for a more compact, icon-only tab bar.
-                {layoutMode !== 'tabs' && <span className="ml-1 text-text-muted/60">(Switch to top bar layout to use this setting.)</span>}
+                {layoutMode !== 'tabs' && (
+                  <span className="ml-1 text-text-muted/60">
+                    (Switch to top bar layout to use this setting.)
+                  </span>
+                )}
               </p>
             </div>
             <button
-              onClick={() => updateGeneralConfig({ showTabLabels: generalConfig?.showTabLabels === false })}
+              onClick={() =>
+                updateGeneralConfig({ showTabLabels: generalConfig?.showTabLabels === false })
+              }
               className={`no-drag relative w-10 h-6 rounded-full transition-colors duration-150 cursor-pointer focus:outline-none ${
-                generalConfig?.showTabLabels !== false ? 'bg-accent' : 'bg-dominant border border-surface-border'
+                generalConfig?.showTabLabels !== false
+                  ? 'bg-accent'
+                  : 'bg-dominant border border-surface-border'
               }`}
             >
               <div
@@ -849,9 +922,13 @@ function SettingsPanel(): React.JSX.Element {
               </p>
             </div>
             <button
-              onClick={() => updateGeneralConfig({ startWithWindows: !generalConfig?.startWithWindows })}
+              onClick={() =>
+                updateGeneralConfig({ startWithWindows: !generalConfig?.startWithWindows })
+              }
               className={`no-drag relative w-10 h-6 rounded-full transition-colors duration-150 cursor-pointer focus:outline-none ${
-                generalConfig?.startWithWindows ? 'bg-accent' : 'bg-dominant border border-surface-border'
+                generalConfig?.startWithWindows
+                  ? 'bg-accent'
+                  : 'bg-dominant border border-surface-border'
               }`}
             >
               <div
@@ -877,7 +954,8 @@ function SettingsPanel(): React.JSX.Element {
                 App Lock (4-Digit PIN)
               </h3>
               <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
-                When enabled, Gradd will require a PIN when starting or restoring from the system tray. OS lock/sleep will also trigger it automatically.
+                When enabled, Gradd will require a PIN when starting or restoring from the system
+                tray. OS lock/sleep will also trigger it automatically.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -898,7 +976,9 @@ function SettingsPanel(): React.JSX.Element {
                   setPinMode(generalConfig?.hasAppLock ? 'remove' : 'set')
                 }}
                 className={`no-drag relative w-10 h-6 rounded-full transition-colors duration-150 cursor-pointer focus:outline-none ${
-                  generalConfig?.hasAppLock ? 'bg-accent' : 'bg-dominant border border-surface-border'
+                  generalConfig?.hasAppLock
+                    ? 'bg-accent'
+                    : 'bg-dominant border border-surface-border'
                 }`}
               >
                 <div
@@ -975,17 +1055,18 @@ function SettingsPanel(): React.JSX.Element {
                 Export / Import Configuration
               </h3>
               <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
-                Manually save your exact setup (services, layouts, and DND states) to a local file, or load an existing one.
+                Manually save your exact setup (services, layouts, and DND states) to a local file,
+                or load an existing one.
               </p>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={async () => {
-                  const res = await window.api.exportConfig();
+                  const res = await window.api.exportConfig()
                   if (res.success) {
-                    alert('Configuration exported successfully!');
+                    alert('Configuration exported successfully!')
                   } else if (res.error) {
-                    alert('Export failed: ' + res.error);
+                    alert('Export failed: ' + res.error)
                   }
                 }}
                 className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none bg-dominant hover:bg-hover-surface text-text-primary border border-surface-border"
@@ -994,11 +1075,11 @@ function SettingsPanel(): React.JSX.Element {
               </button>
               <button
                 onClick={async () => {
-                  const res = await window.api.importConfig();
+                  const res = await window.api.importConfig()
                   if (res.success) {
                     // App will automatically restart
                   } else if (res.error) {
-                    alert('Import failed: ' + res.error);
+                    alert('Import failed: ' + res.error)
                   }
                 }}
                 className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30"
@@ -1012,11 +1093,17 @@ function SettingsPanel(): React.JSX.Element {
         {/* Old Cache section removed here */}
 
         {/* Section 3: Do Not Disturb */}
-        <section className={`bg-secondary border rounded-lg p-5 flex flex-col gap-4 transition-all duration-150 ${
-          isDndActive ? 'border-accent/30' : 'border-surface-border'
-        }`}>
+        <section
+          className={`bg-secondary border rounded-lg p-5 flex flex-col gap-4 transition-all duration-150 ${
+            isDndActive ? 'border-accent/30' : 'border-surface-border'
+          }`}
+        >
           <div className="flex items-center gap-3">
-            <Moon size={20} weight={isDndActive ? "fill" : "bold"} className={isDndActive ? "text-accent animate-pulse" : "text-text-muted"} />
+            <Moon
+              size={20}
+              weight={isDndActive ? 'fill' : 'bold'}
+              className={isDndActive ? 'text-accent animate-pulse' : 'text-text-muted'}
+            />
             <h2 className="text-sm font-semibold text-text-primary leading-[1.2]">
               Do Not Disturb (DND)
             </h2>
@@ -1031,7 +1118,9 @@ function SettingsPanel(): React.JSX.Element {
             {/* Manual Toggle */}
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">Enable Do Not Disturb</h3>
+                <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">
+                  Enable Do Not Disturb
+                </h3>
                 <p className="text-xs text-text-muted mt-1 leading-[1.4]">
                   Mute all service sounds and block native desktop notifications immediately.
                 </p>
@@ -1054,7 +1143,9 @@ function SettingsPanel(): React.JSX.Element {
             {/* Schedule Enable Toggle */}
             <div className="flex items-center justify-between border-t border-surface-border/30 pt-4">
               <div>
-                <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">Recurring DND Schedule</h3>
+                <h3 className="text-xs font-semibold text-text-primary leading-[1.2]">
+                  Recurring DND Schedule
+                </h3>
                 <p className="text-xs text-text-muted mt-1 leading-[1.4]">
                   Automatically activate Do Not Disturb during specific hours.
                 </p>
@@ -1062,7 +1153,9 @@ function SettingsPanel(): React.JSX.Element {
               <button
                 onClick={() => updateDndConfig({ scheduleEnabled: !dndConfig.scheduleEnabled })}
                 className={`no-drag relative w-10 h-6 rounded-full transition-colors duration-150 cursor-pointer focus:outline-none ${
-                  dndConfig.scheduleEnabled ? 'bg-accent' : 'bg-dominant border border-surface-border'
+                  dndConfig.scheduleEnabled
+                    ? 'bg-accent'
+                    : 'bg-dominant border border-surface-border'
                 }`}
                 aria-label="Toggle DND Schedule"
               >
@@ -1078,7 +1171,12 @@ function SettingsPanel(): React.JSX.Element {
             {dndConfig.scheduleEnabled && (
               <div className="flex flex-col sm:flex-row gap-4 border-t border-surface-border/30 pt-4">
                 <div className="flex-1 flex flex-col gap-1.5">
-                  <label htmlFor="dnd-start-time" className="text-[11px] font-semibold text-text-muted">Start Time</label>
+                  <label
+                    htmlFor="dnd-start-time"
+                    className="text-[11px] font-semibold text-text-muted"
+                  >
+                    Start Time
+                  </label>
                   <input
                     id="dnd-start-time"
                     type="time"
@@ -1088,7 +1186,12 @@ function SettingsPanel(): React.JSX.Element {
                   />
                 </div>
                 <div className="flex-1 flex flex-col gap-1.5">
-                  <label htmlFor="dnd-end-time" className="text-[11px] font-semibold text-text-muted">End Time</label>
+                  <label
+                    htmlFor="dnd-end-time"
+                    className="text-[11px] font-semibold text-text-muted"
+                  >
+                    End Time
+                  </label>
                   <input
                     id="dnd-end-time"
                     type="time"
@@ -1116,7 +1219,8 @@ function SettingsPanel(): React.JSX.Element {
                 Reset Application Sessions
               </h3>
               <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
-                Clears all logged-in sessions, cookies, local cache, and history for all embedded services.
+                Clears all logged-in sessions, cookies, local cache, and history for all embedded
+                services.
               </p>
             </div>
             <div>
@@ -1150,7 +1254,8 @@ function SettingsPanel(): React.JSX.Element {
                 Reset App to Defaults
               </h3>
               <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
-                Wipes all settings, service configuration, and sessions. Gradd restarts fresh. Cannot be undone.
+                Wipes all settings, service configuration, and sessions. Gradd restarts fresh.
+                Cannot be undone.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -1195,7 +1300,8 @@ function SettingsPanel(): React.JSX.Element {
                 App Version: <span className="text-accent">v{appVersion}</span>
               </h3>
               <p className="text-xs text-text-muted mt-1 leading-[1.4]">
-                Keep Gradd up to date with the latest features, security patches, and performance updates.
+                Keep Gradd up to date with the latest features, security patches, and performance
+                updates.
               </p>
             </div>
             <div>
@@ -1203,7 +1309,7 @@ function SettingsPanel(): React.JSX.Element {
                 onClick={handleCheckUpdates}
                 disabled={checkingState === 'checking' || checkingState === 'available'}
                 className={`no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer flex items-center gap-1.5 ${
-                  (checkingState === 'checking' || checkingState === 'available')
+                  checkingState === 'checking' || checkingState === 'available'
                     ? 'bg-hover-surface text-text-muted cursor-not-allowed border border-surface-border'
                     : checkingState === 'up-to-date'
                       ? 'bg-green-600/20 text-green-400 border border-green-500/30'
@@ -1249,14 +1355,15 @@ function SettingsPanel(): React.JSX.Element {
             </div>
           )}
           <div className="border-t border-surface-border/50 pt-3 mt-1 flex items-center justify-between">
-            <span className="text-xs text-text-muted">
-              v{appVersion} · MIT License
-            </span>
+            <span className="text-xs text-text-muted">v{appVersion} · MIT License</span>
             <a
               href="https://vi-design.pro"
               target="_blank"
               rel="noopener noreferrer"
-              onClick={(e) => { e.preventDefault(); window.api.openExternal('https://vi-design.pro') }}
+              onClick={(e) => {
+                e.preventDefault()
+                window.api.openExternal('https://vi-design.pro')
+              }}
               className="text-xs text-text-muted hover:text-text-primary transition-colors duration-150 cursor-pointer"
             >
               ViFurzy · vi-design.pro
@@ -1272,14 +1379,17 @@ function SettingsPanel(): React.JSX.Element {
             </h2>
             {stats && (
               <div className="flex gap-6 text-xs text-text-primary">
-                <span>DAU: <span className="text-accent font-semibold">{stats.dau}</span></span>
-                <span>MAU: <span className="text-accent font-semibold">{stats.mau}</span></span>
+                <span>
+                  DAU: <span className="text-accent font-semibold">{stats.dau}</span>
+                </span>
+                <span>
+                  MAU: <span className="text-accent font-semibold">{stats.mau}</span>
+                </span>
               </div>
             )}
             {statsError && <span className="text-xs text-destructive">{statsError}</span>}
           </section>
         )}
-
       </div>
     </div>
   )

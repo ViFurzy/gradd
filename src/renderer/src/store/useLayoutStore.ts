@@ -3,7 +3,15 @@ import { create } from 'zustand'
 export interface ServiceConfig {
   id: string
   name: string
-  type: 'messenger' | 'whatsapp' | 'telegram' | 'slack' | 'instagram' | 'gadugadu' | 'linkedin' | 'teams'
+  type:
+    | 'messenger'
+    | 'whatsapp'
+    | 'telegram'
+    | 'slack'
+    | 'instagram'
+    | 'gadugadu'
+    | 'linkedin'
+    | 'teams'
   url: string
   enabled: boolean
   unreadCount?: number
@@ -22,7 +30,12 @@ interface LayoutState {
   services: ServiceConfig[]
   activeServiceId: string | null
   activePanel: 'directory' | 'settings' | 'service'
-  generalConfig: { closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean; hasAppLock?: boolean }
+  generalConfig: {
+    closeToTray: boolean
+    showTabLabels: boolean
+    startWithWindows: boolean
+    hasAppLock?: boolean
+  }
   isLocked: boolean
   setLocked: (locked: boolean) => void
   setLayoutMode: (mode: 'sidebar' | 'tabs') => Promise<void>
@@ -38,7 +51,9 @@ interface LayoutState {
   updateDndConfig: (config: Partial<DndConfig>) => Promise<void>
   setDndActiveState: (active: boolean) => void
   reorderServices: (enabledServices: ServiceConfig[]) => void
-  updateGeneralConfig: (config: Partial<{ closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean }>) => Promise<void>
+  updateGeneralConfig: (
+    config: Partial<{ closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean }>
+  ) => Promise<void>
   setAppPin: (pin: string, currentPin?: string) => Promise<boolean>
   verifyAppPin: (pin: string) => Promise<{ ok: boolean; retryAfterMs?: number }>
 }
@@ -104,7 +119,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       const dnd = await window.api.getDndConfig()
       const dndActiveState = await window.api.getDndActive()
       const generalConfig = await window.api.getGeneralConfig()
-      
+
       const servicesWithUnread = servicesList.map((s) => ({
         ...s,
         unreadCount: 0

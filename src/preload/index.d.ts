@@ -3,7 +3,15 @@ import { ElectronAPI } from '@electron-toolkit/preload'
 export interface ServiceConfig {
   id: string
   name: string
-  type: 'messenger' | 'whatsapp' | 'telegram' | 'slack' | 'instagram' | 'gadugadu' | 'linkedin' | 'teams'
+  type:
+    | 'messenger'
+    | 'whatsapp'
+    | 'telegram'
+    | 'slack'
+    | 'instagram'
+    | 'gadugadu'
+    | 'linkedin'
+    | 'teams'
   url: string
   enabled: boolean
   muted?: boolean
@@ -15,7 +23,7 @@ export interface GraddAPI {
   getServices(): Promise<ServiceConfig[]>
   saveServices(services: ServiceConfig[]): Promise<void>
   switchService(id: string | null): Promise<void>
-  updateViewBounds(bounds: { x: number, y: number, width: number, height: number }): Promise<void>
+  updateViewBounds(bounds: { x: number; y: number; width: number; height: number }): Promise<void>
   clearStorageData(): Promise<void>
   showServiceContextMenu(id: string): Promise<void>
   clearServiceStorageData(id: string): Promise<void>
@@ -30,8 +38,17 @@ export interface GraddAPI {
   onServicesUpdated(callback: (services: ServiceConfig[]) => void): () => void
   getAppVersion(): Promise<string>
   getActiveUserStats(): Promise<{ dau: number; mau: number } | null>
-  getGeneralConfig(): Promise<{ closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean; hasAppLock: boolean }>
-  setGeneralConfig(config: { closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean }): Promise<void>
+  getGeneralConfig(): Promise<{
+    closeToTray: boolean
+    showTabLabels: boolean
+    startWithWindows: boolean
+    hasAppLock: boolean
+  }>
+  setGeneralConfig(config: {
+    closeToTray: boolean
+    showTabLabels: boolean
+    startWithWindows: boolean
+  }): Promise<void>
   exportConfig(): Promise<{ success: boolean; error?: string }>
   importConfig(): Promise<{ success: boolean; error?: string }>
   clearConfig(): Promise<void>

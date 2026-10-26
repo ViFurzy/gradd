@@ -3,7 +3,15 @@ import Store from 'electron-store'
 export interface ServiceConfig {
   id: string
   name: string
-  type: 'messenger' | 'whatsapp' | 'telegram' | 'slack' | 'instagram' | 'gadugadu' | 'linkedin' | 'teams'
+  type:
+    | 'messenger'
+    | 'whatsapp'
+    | 'telegram'
+    | 'slack'
+    | 'instagram'
+    | 'gadugadu'
+    | 'linkedin'
+    | 'teams'
   url: string
   enabled: boolean
   muted?: boolean
@@ -32,9 +40,9 @@ export interface AppConfig {
   services: ServiceConfig[]
   dnd: DndConfig
   general: {
-    closeToTray: boolean;
-    showTabLabels?: boolean;
-    appLockPin?: string;
+    closeToTray: boolean
+    showTabLabels?: boolean
+    appLockPin?: string
   }
   lastVisited?: Record<string, string>
   installId?: string

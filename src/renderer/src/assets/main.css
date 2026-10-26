@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
   --color-dominant: #0f0f11;
@@ -24,7 +24,11 @@ body,
   height: 100%;
   overflow: hidden;
   background-color: transparent; /* Allows Mica to show through in content area */
-  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    sans-serif;
   color: var(--color-text-primary);
   user-select: none;
   -webkit-user-select: none;
@@ -44,6 +48,6 @@ body,
   display: none;
 }
 .no-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
 }
