@@ -22,7 +22,6 @@ interface LayoutState {
   services: ServiceConfig[]
   activeServiceId: string | null
   activePanel: 'directory' | 'settings' | 'service'
-  authState: { loggedIn: boolean; uid?: string; photoURL?: string }
   generalConfig: { closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean; hasAppLock?: boolean }
   isLocked: boolean
   setLocked: (locked: boolean) => void
@@ -40,8 +39,6 @@ interface LayoutState {
   setDndActiveState: (active: boolean) => void
   reorderServices: (enabledServices: ServiceConfig[]) => Promise<void>
   updateGeneralConfig: (config: Partial<{ closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean }>) => Promise<void>
-  loginGoogle: () => Promise<void>
-  logoutGoogle: () => Promise<void>
   setAppPin: (pin: string) => Promise<boolean>
   verifyAppPin: (pin: string) => Promise<boolean>
 }
@@ -51,7 +48,6 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   services: [],
   activeServiceId: null,
   activePanel: 'directory',
-  authState: { loggedIn: false },
   dndConfig: {
     manualActive: false,
     scheduleEnabled: false,
@@ -107,7 +103,6 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       const servicesList = await window.api.getServices()
       const dnd = await window.api.getDndConfig()
       const dndActiveState = await window.api.getDndActive()
-      const authState = await window.api.getAuthStatus()
       const generalConfig = await window.api.getGeneralConfig()
       
       const servicesWithUnread = servicesList.map((s) => ({
@@ -120,7 +115,6 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         services: servicesWithUnread,
         dndConfig: dnd,
         isDndActive: dndActiveState,
-        authState,
         generalConfig,
         activePanel: 'directory', // Start on the directory dashboard
         isLocked: !!generalConfig.hasAppLock
@@ -160,20 +154,6 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     const updated = [...enabledServices, ...disabledServices]
     set({ services: updated })
     await window.api.saveServices(updated)
-  },
-  loginGoogle: async () => {
-    const result = await window.api.loginGoogle()
-    if (result.success) {
-      set({ authState: { loggedIn: true, uid: result.uid, photoURL: result.photoURL } })
-    } else {
-      throw new Error(result.error || 'Login failed')
-    }
-  },
-  logoutGoogle: async () => {
-    const result = await window.api.logoutGoogle()
-    if (result.success) {
-      set({ authState: { loggedIn: false } })
-    }
   },
   setAppPin: async (pin: string) => {
     const success = await window.api.setAppPin(pin)

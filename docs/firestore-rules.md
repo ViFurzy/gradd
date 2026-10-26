@@ -20,3 +20,5 @@ match /activity/{installId} {
 ## Prerequisite
 
 The dev dashboard read only succeeds when Gradd is signed in with Google as `mzveasper@gmail.com`. Use the "Sign in with Google" button in the dev-only Settings panel to authenticate. This is a hard requirement, not optional polish — without it, the panel shows a permission-denied error.
+
+> **Update 2026-10-26:** Google sign-in was removed from Gradd, so the "Sign in with Google" button no longer exists. The dev DAU/MAU read now needs Firestore rules that permit it without that sign-in. The rules above were not changed here.

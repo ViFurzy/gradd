@@ -7,31 +7,10 @@ import { readFileSync, writeFileSync } from 'fs'
 import { randomUUID } from 'crypto'
 import icon from '../../resources/icon.png?asset'
 import { store, initStore, DndConfig, defaultServices } from './store.js'
-import { loginWithGoogle, refreshGoogleToken, encryptToken, decryptToken, getGoogleUserInfo } from './auth.js'
-import { loginToFirebase, logoutFromFirebase, syncConfigToCloud, fetchConfigFromCloud, onCloudConfigChanged, recordHeartbeat, getActiveUserStats } from './firebase.js'
+import { encryptToken, decryptToken } from './crypto.js'
+import { recordHeartbeat, getActiveUserStats } from './firebase.js'
 import pkg from 'electron-updater'
 let isDev = false // set in app.whenReady
-
-let unsubscribeCloudSync: (() => void) | null = null;
-
-// Helper to push current config to cloud (debounced — coalesces rapid config changes)
-async function pushConfigToCloud() {
-  const authState = store.get('auth');
-  if (authState?.uid) {
-    const config = {
-      services: store.get('services'),
-      dnd: store.get('dnd'),
-      layout: store.get('layout')
-    };
-    await syncConfigToCloud(authState.uid, config);
-  }
-}
-
-function debouncedPushConfigToCloud() {
-  if (cloudSyncTimeout) clearTimeout(cloudSyncTimeout);
-  cloudSyncTimeout = setTimeout(() => pushConfigToCloud(), 2000);
-}
-
 
 // Set application name and model ID for proper OS notifications and audio branding
 app.setName('Gradd')
@@ -65,7 +44,6 @@ let mainWindow: BrowserWindowType | null = null
 let tray: TrayType | null = null
 let isQuitting = false
 let saveTimeout: NodeJS.Timeout | null = null
-let cloudSyncTimeout: NodeJS.Timeout | null = null
 // Timestamp (ms) when the window was last hidden to the system tray.
 // Used to detect service views that went stale while the app was backgrounded.
 let windowHiddenAt: number | null = null
@@ -1346,7 +1324,6 @@ app.whenReady().then(() => {
 
   ipcMain.handle('set-layout-mode', (_, mode: 'sidebar' | 'tabs') => {
     store.set('layout.mode', mode)
-    debouncedPushConfigToCloud()
   })
 
   ipcMain.handle('get-services', () => {
@@ -1357,7 +1334,6 @@ app.whenReady().then(() => {
     const previousServices = store.get('services') || []
     store.set('services', services)
     applyDndState()
-    debouncedPushConfigToCloud()
 
     // Destroy WebContentsViews for services that have been disabled to free Chromium memory
     for (const prev of previousServices) {
@@ -1489,32 +1465,6 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('show-profile-menu', (event) => {
-    const menu = Menu.buildFromTemplate([
-      {
-        label: 'Settings',
-        click: () => {
-          if (mainWindow) {
-            mainWindow.webContents.send('profile-menu-action', 'settings')
-          }
-        }
-      },
-      { type: 'separator' },
-      {
-        label: 'Log Out',
-        click: () => {
-          if (mainWindow) {
-            mainWindow.webContents.send('profile-menu-action', 'logout')
-          }
-        }
-      }
-    ])
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (win) {
-      menu.popup({ window: win })
-    }
-  })
-
   ipcMain.handle('clear-service-storage-data', async (_, id: string) => {
     try {
       const ses = session.fromPartition(`persist:service-${id}`)
@@ -1620,7 +1570,6 @@ app.whenReady().then(() => {
   ipcMain.handle('set-dnd-config', (_, config: any) => {
     store.set('dnd', config)
     evaluateDndState()
-    debouncedPushConfigToCloud()
   })
 
   ipcMain.handle('get-dnd-active', () => {
@@ -1669,75 +1618,6 @@ app.whenReady().then(() => {
     }
     return true
   })
-
-  ipcMain.handle('login-google', async () => {
-    try {
-      const tokens = await loginWithGoogle();
-
-      // Always get user info from Google — this is the source of truth for uid/photoURL
-      // and works regardless of Firebase client_id configuration.
-      const userInfo = await getGoogleUserInfo(tokens.accessToken);
-      const encryptedRefresh = encryptToken(tokens.refreshToken);
-
-      let uid = userInfo.uid;
-      let photoURL: string | undefined = userInfo.photoURL || undefined;
-
-      // Attempt Firebase auth for cloud sync — optional, degrades gracefully.
-      // Fails when the Desktop app OAuth client_id isn't in Firebase's authorized list;
-      // user is still logged in locally and cloud sync is skipped.
-      let firebaseOk = false;
-      try {
-        const firebaseResult = await loginToFirebase(tokens.idToken);
-        uid = firebaseResult.uid; // Firebase uid matches Google sub
-        photoURL = firebaseResult.photoURL || photoURL;
-        firebaseOk = true;
-      } catch (fbErr: any) {
-        console.warn('[Auth] Firebase login failed — cloud sync unavailable:', fbErr.message);
-      }
-
-      store.set('auth', { uid, photoURL, refreshToken: encryptedRefresh });
-
-      if (firebaseOk) {
-        const cloudConfig = await fetchConfigFromCloud(uid);
-        if (cloudConfig) {
-          if (cloudConfig.services) store.set('services', cloudConfig.services);
-          if (cloudConfig.dnd) store.set('dnd', cloudConfig.dnd);
-          if (cloudConfig.layout) store.set('layout', cloudConfig.layout);
-          if (mainWindow) {
-            mainWindow.webContents.send('services-updated', store.get('services'));
-          }
-        } else {
-          await pushConfigToCloud();
-        }
-        setupCloudSyncListener(uid);
-      }
-
-      return { success: true, uid, photoURL };
-    } catch (err: any) {
-      console.error('Google login failed:', err);
-      return { success: false, error: err.message };
-    }
-  });
-
-  ipcMain.handle('logout-google', async () => {
-    try {
-      await logoutFromFirebase();
-      store.delete('auth' as any);
-      if (unsubscribeCloudSync) {
-        unsubscribeCloudSync();
-        unsubscribeCloudSync = null;
-      }
-      return { success: true };
-    } catch (err: any) {
-      console.error('Logout failed:', err);
-      return { success: false, error: err.message };
-    }
-  });
-
-  ipcMain.handle('get-auth-status', () => {
-    const authState = store.get('auth');
-    return authState ? { loggedIn: true, uid: authState.uid, photoURL: authState.photoURL } : { loggedIn: false };
-  });
 
   // --- Auto Updater Setup ---
   autoUpdater.autoDownload = false; // We'll trigger download manually if user chooses
@@ -1861,7 +1741,6 @@ app.whenReady().then(() => {
 
       mainWindow.webContents.send('services-updated', store.get('services'));
       evaluateDndState();
-      pushConfigToCloud();
 
       app.relaunch();
       app.exit(0);
@@ -1920,54 +1799,6 @@ app.whenReady().then(() => {
   powerMonitor.on('unlock-screen', refreshActiveViewBounds)
   powerMonitor.on('resume', refreshActiveViewBounds)
   // -----------------------------
-
-  function setupCloudSyncListener(uid: string) {
-    if (unsubscribeCloudSync) unsubscribeCloudSync();
-    unsubscribeCloudSync = onCloudConfigChanged(uid, (remoteConfig) => {
-      // Basic merge: incoming changes override local
-      if (remoteConfig) {
-        // Skip updating if identical to avoid loop (simplified)
-        if (remoteConfig.services) store.set('services', remoteConfig.services);
-        if (remoteConfig.dnd) {
-          store.set('dnd', remoteConfig.dnd);
-          evaluateDndState();
-        }
-        if (remoteConfig.layout) store.set('layout', remoteConfig.layout);
-        if (mainWindow) mainWindow.webContents.send('services-updated', store.get('services'));
-      }
-    });
-  }
-
-  // Auto-login on startup if a stored refresh token exists
-  setTimeout(async () => {
-    const auth = store.get('auth');
-    if (auth && auth.refreshToken) {
-      try {
-        const newTokens = await refreshGoogleToken(decryptToken(auth.refreshToken));
-        const { uid, photoURL } = await loginToFirebase(newTokens.idToken);
-        if (uid === auth.uid) {
-          store.set('auth.photoURL', photoURL || undefined);
-          setupCloudSyncListener(uid);
-          console.log(`[Main] Auto-login restored session for UID: ${uid}`);
-        }
-      } catch (err: any) {
-        console.error('[Main] Auto-login failed:', err);
-        // Token is stale or the OAuth client changed (e.g. client_secret removed).
-        // Clear it so the error doesn't repeat on every startup — user re-logs in Settings.
-        const msg: string = err?.message ?? '';
-        if (
-          msg.includes('client_secret') ||
-          msg.includes('invalid_client') ||
-          msg.includes('invalid_grant') ||
-          msg.includes('Token has been expired')
-        ) {
-          store.delete('auth' as any);
-          console.warn('[Main] Cleared stale auth token — please sign in again via Settings.');
-          if (mainWindow) mainWindow.webContents.send('services-updated', store.get('services'));
-        }
-      }
-    }
-  }, 1000);
 
   // Periodically evaluate DND state (every 30 seconds)
   setInterval(evaluateDndState, 30000)

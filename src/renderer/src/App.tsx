@@ -690,13 +690,6 @@ function SettingsPanel(): React.JSX.Element {
     window.api.checkForUpdates()
   }
 
-  const handleDevSignIn = async (): Promise<void> => {
-    await window.api.loginGoogle()
-    window.api.getActiveUserStats()
-      .then(setStats)
-      .catch((err) => setStatsError(err.message))
-  }
-
   const handleClearSessions = async (): Promise<void> => {
     setClearingState('clearing')
     try {
@@ -1184,17 +1177,7 @@ function SettingsPanel(): React.JSX.Element {
                 <span>MAU: <span className="text-accent font-semibold">{stats.mau}</span></span>
               </div>
             )}
-            {statsError && (
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs text-destructive">{statsError}</span>
-                <button
-                  onClick={handleDevSignIn}
-                  className="no-drag px-4 py-2 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer bg-accent text-white hover:bg-accent/80"
-                >
-                  Sign in with Google
-                </button>
-              </div>
-            )}
+            {statsError && <span className="text-xs text-destructive">{statsError}</span>}
           </section>
         )}
 

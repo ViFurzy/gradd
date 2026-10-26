@@ -30,9 +30,6 @@ export interface GraddAPI {
   onServicesUpdated(callback: (services: ServiceConfig[]) => void): void
   getAppVersion(): Promise<string>
   getActiveUserStats(): Promise<{ dau: number; mau: number } | null>
-  loginGoogle(): Promise<{ success: boolean; uid?: string; error?: string; photoURL?: string }>
-  logoutGoogle(): Promise<{ success: boolean; error?: string }>
-  getAuthStatus(): Promise<{ loggedIn: boolean; uid?: string; photoURL?: string }>
   getGeneralConfig(): Promise<{ closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean; hasAppLock: boolean }>
   setGeneralConfig(config: { closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean }): Promise<void>
   exportConfig(): Promise<{ success: boolean; error?: string }>
@@ -45,8 +42,6 @@ export interface GraddAPI {
   onUpdateNotAvailable(callback: (info: any) => void): void
   onUpdateDownloaded(callback: (info: any) => void): void
   onUpdateError(callback: (error: string) => void): void
-  showProfileMenu(): Promise<void>
-  onProfileMenuAction(callback: (action: 'settings' | 'logout') => void): void
   openExternal(url: string): Promise<void>
   setAppPin(pin: string): Promise<boolean>
   verifyAppPin(pin: string): Promise<boolean>

@@ -32,9 +32,6 @@ const api = {
   },
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
   getActiveUserStats: (): Promise<{ dau: number; mau: number } | null> => ipcRenderer.invoke('get-active-user-stats'),
-  loginGoogle: (): Promise<{ success: boolean; uid?: string; error?: string }> => ipcRenderer.invoke('login-google'),
-  logoutGoogle: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('logout-google'),
-  getAuthStatus: (): Promise<{ loggedIn: boolean; uid?: string; photoURL?: string }> => ipcRenderer.invoke('get-auth-status'),
   getGeneralConfig: (): Promise<any> => ipcRenderer.invoke('get-general-config'),
   setGeneralConfig: (config: any): Promise<void> => ipcRenderer.invoke('set-general-config', config),
   exportConfig: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('export-config'),
@@ -56,10 +53,6 @@ const api = {
   },
   onUpdateError: (callback: (error: string) => void): void => {
     ipcRenderer.on('update-error', (_e, err) => callback(err))
-  },
-  showProfileMenu: (): Promise<void> => ipcRenderer.invoke('show-profile-menu'),
-  onProfileMenuAction: (callback: (action: 'settings' | 'logout') => void): void => {
-    ipcRenderer.on('profile-menu-action', (_e, action) => callback(action))
   },
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('open-external', url),
   setAppPin: (pin: string): Promise<boolean> => ipcRenderer.invoke('set-app-pin', pin),

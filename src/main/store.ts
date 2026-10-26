@@ -31,12 +31,6 @@ export interface AppConfig {
   }
   services: ServiceConfig[]
   dnd: DndConfig
-  auth?: {
-    uid: string;
-    email?: string;
-    photoURL?: string;
-    refreshToken: string; // encrypted
-  }
   general: {
     closeToTray: boolean;
     appLockPin?: string;
@@ -144,6 +138,8 @@ export function initStore(userDataPath: string): void {
   })
 
   // Migrations
+  // Drop stale Google refresh token left over from the removed cloud sync
+  store.delete('auth' as any)
   // Clear stale Slack chooser URL so /client is used on next launch
   const lastVisited = store.get('lastVisited') || {}
   if (lastVisited['slack'] === 'https://app.slack.com') {
