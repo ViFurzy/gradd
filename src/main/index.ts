@@ -60,6 +60,35 @@ const serviceUnreads = new Map<string, number>()
 const serviceZeroStreak = new Map<string, number>()
 let activeServiceId: string | null = null
 let contentBounds = { x: 0, y: 0, width: 0, height: 0 }
+// True while the PIN lock screen is up: the active native view is kept off-screen so it can't paint over it.
+let appLocked = false
+
+function activeViewBounds(): { x: number; y: number; width: number; height: number } {
+  return appLocked
+    ? { x: -10000, y: -10000, width: contentBounds.width || 1280, height: contentBounds.height || 800 }
+    : contentBounds
+}
+
+function lockApp(): void {
+  if (!store.get('general')?.appLockPin) return
+  appLocked = true
+  if (activeServiceId) {
+    const view = serviceViews.get(activeServiceId)
+    if (view && !view.webContents.isDestroyed()) view.setBounds(activeViewBounds())
+  }
+  if (mainWindow) mainWindow.webContents.send('lock-app')
+}
+
+// Single gate for opening URLs in the system browser: http/https/mailto only.
+function openSafe(url: string): void {
+  try {
+    const { protocol } = new URL(url)
+    if (protocol !== 'http:' && protocol !== 'https:' && protocol !== 'mailto:') return
+    shell.openExternal(url).catch((err) => console.error('Failed to open external URL:', err))
+  } catch (err) {
+    console.error('Invalid external URL:', err)
+  }
+}
 let dndActive = false
 
 function isTimeInSchedule(current: string, start: string, end: string): boolean {
@@ -603,7 +632,7 @@ function recreateServiceView(serviceId: string): void {
   const newView = getOrCreateView(serviceId)
   if (newView && wasActive) {
     mainWindow.contentView.addChildView(newView)
-    newView.setBounds(contentBounds)
+    newView.setBounds(activeViewBounds())
     newView.webContents.setBackgroundThrottling(false)
   }
 }
@@ -709,7 +738,7 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
           return { action: 'deny' }
         }
         if (disposition === 'foreground-tab' || disposition === 'background-tab') {
-          shell.openExternal(url).catch((err) => console.error('Failed to open external URL:', err))
+          openSafe(url)
           return { action: 'deny' }
         }
         // new-window = programmatic auth popup (JumpCloud, Okta, Azure AD, etc.)
@@ -736,7 +765,7 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
 
       // Link clicks (target="_blank" etc.) always go to the browser
       if (disposition === 'foreground-tab' || disposition === 'background-tab') {
-        shell.openExternal(url).catch((err) => console.error('Failed to open external URL:', err))
+        openSafe(url)
         return { action: 'deny' }
       }
 
@@ -762,7 +791,7 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
     }
 
     // Everything else → system browser
-    shell.openExternal(url).catch((err) => console.error('Failed to open external URL:', err))
+    openSafe(url)
     return { action: 'deny' }
   })
 
@@ -823,7 +852,7 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
           if (isOAuthProvider) {
             openOAuthPopup(url, serviceId, allowedDomains)
           } else {
-            shell.openExternal(url).catch((err) => console.error('Failed to open external URL:', err))
+            openSafe(url)
           }
         }
       }
@@ -914,7 +943,7 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
         },
         {
           label: 'Open Link in Browser',
-          click: () => shell.openExternal(params.linkURL).catch((err) => console.error('Failed to open link:', err))
+          click: () => openSafe(params.linkURL)
         }
       )
     }
@@ -1133,7 +1162,7 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    openSafe(details.url)
     return { action: 'deny' }
   })
 
@@ -1182,6 +1211,7 @@ function createWindow(): void {
   // that SPAs (especially Telegram Web) get a full navigation restart rather
   // than attempting to resume from a potentially blank/suspended renderer state.
   mainWindow.on('hide', () => {
+    if (activeServiceId) serviceLastActive.set(activeServiceId, Date.now())
     windowHiddenAt = Date.now()
   })
 
@@ -1189,17 +1219,20 @@ function createWindow(): void {
     if (windowHiddenAt === null) return
     const hiddenAt = windowHiddenAt
     windowHiddenAt = null
+    if (activeServiceId) serviceLastActive.set(activeServiceId, Date.now())
 
     // Recreate any service view that went stale while the window was hidden.
     // loadURL alone cannot recover a crashed renderer — full recreation is required.
     // Snapshot keys first to avoid mutating the map while iterating.
     for (const serviceId of [...serviceViews.keys()]) {
+      if (serviceId === activeServiceId) continue
       const lastActive = serviceLastActive.get(serviceId) ?? 0
       if (lastActive < hiddenAt) {
         console.log(`[Main] Recreating stale service view '${serviceId}' after tray restore (last active: ${new Date(lastActive).toISOString()})`)
         recreateServiceView(serviceId)
       }
     }
+    lockApp()
   })
 }
 
@@ -1297,6 +1330,7 @@ app.on('web-contents-created', (_, contents) => {
 app.whenReady().then(() => {
   isDev = !app.isPackaged
   initStore(app.getPath('userData'))
+  appLocked = !!store.get('general')?.appLockPin
 
   // Anonymous DAU/MAU heartbeat — fire-and-forget so a network failure can't delay startup
   let installId = store.get('installId')
@@ -1359,6 +1393,7 @@ app.whenReady().then(() => {
     if (activeServiceId === id) return
 
     if (activeServiceId && mainWindow) {
+      serviceLastActive.set(activeServiceId, Date.now())
       const activeView = serviceViews.get(activeServiceId)
       if (activeView) {
         // Move off-screen rather than removeChildView — keeps visibilityState = 'visible'
@@ -1379,7 +1414,7 @@ app.whenReady().then(() => {
       if (!mainWindow.contentView.children.includes(view)) {
         mainWindow.contentView.addChildView(view)
       }
-      view.setBounds(contentBounds)
+      view.setBounds(activeViewBounds())
       activeServiceId = id
       serviceLastActive.set(id, Date.now())
     }
@@ -1390,7 +1425,7 @@ app.whenReady().then(() => {
     if (activeServiceId) {
       const activeView = serviceViews.get(activeServiceId)
       if (activeView) {
-        activeView.setBounds(contentBounds)
+        activeView.setBounds(activeViewBounds())
       }
     }
   })
@@ -1597,7 +1632,7 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('open-external', (_event, url: string) => {
-    return shell.openExternal(url)
+    openSafe(url)
   })
 
   ipcMain.handle('get-general-config', () => {
@@ -1611,8 +1646,13 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('set-general-config', (_, config) => {
-    const { startWithWindows, ...storeConfig } = config as Record<string, unknown>
-    store.set('general', storeConfig)
+    const { startWithWindows, closeToTray, showTabLabels } = config as Record<string, unknown>
+    // Merge only whitelisted booleans so the stored PIN survives and renderer-only keys (hasAppLock) never persist
+    const general = { ...(store.get('general') || {}) } as Record<string, unknown>
+    if (typeof closeToTray === 'boolean') general.closeToTray = closeToTray
+    if (typeof showTabLabels === 'boolean') general.showTabLabels = showTabLabels
+    delete general.hasAppLock
+    store.set('general', general as any)
     if (typeof startWithWindows === 'boolean') {
       app.setLoginItemSettings({ openAtLogin: startWithWindows })
     }
@@ -1764,6 +1804,7 @@ app.whenReady().then(() => {
       const general = (store.get('general') || {}) as any;
       delete general.appLockPin;
       store.set('general', general);
+      appLocked = false;
       return true;
     }
     const encrypted = encryptToken(pin);
@@ -1777,22 +1818,25 @@ app.whenReady().then(() => {
     const general = store.get('general');
     if (!general?.appLockPin) return true;
     const decrypted = decryptToken(general.appLockPin);
-    return decrypted === pin;
+    if (decrypted !== pin) return false;
+    // Unlock lives here (not in a separate IPC) so the renderer can't unlock without the PIN
+    appLocked = false;
+    if (activeServiceId) {
+      const view = serviceViews.get(activeServiceId);
+      if (view && !view.webContents.isDestroyed()) view.setBounds(contentBounds);
+    }
+    return true;
   });
 
-  powerMonitor.on('lock-screen', () => {
-    if (mainWindow) mainWindow.webContents.send('lock-app');
-  });
+  powerMonitor.on('lock-screen', lockApp);
 
-  powerMonitor.on('suspend', () => {
-    if (mainWindow) mainWindow.webContents.send('lock-app');
-  });
+  powerMonitor.on('suspend', lockApp);
 
   const refreshActiveViewBounds = (): void => {
     if (!activeServiceId) return
     const view = serviceViews.get(activeServiceId)
     if (view && !view.webContents.isDestroyed()) {
-      view.setBounds(contentBounds)
+      view.setBounds(activeViewBounds())
     }
   }
 

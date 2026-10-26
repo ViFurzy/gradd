@@ -33,6 +33,7 @@ export interface AppConfig {
   dnd: DndConfig
   general: {
     closeToTray: boolean;
+    showTabLabels?: boolean;
     appLockPin?: string;
   }
   lastVisited?: Record<string, string>
