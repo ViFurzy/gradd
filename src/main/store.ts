@@ -1,28 +1,7 @@
 import Store from 'electron-store'
+import type { DndConfig, ServiceConfig } from '../shared/types'
 
-export interface ServiceConfig {
-  id: string
-  name: string
-  type:
-    | 'messenger'
-    | 'whatsapp'
-    | 'telegram'
-    | 'slack'
-    | 'instagram'
-    | 'gadugadu'
-    | 'linkedin'
-    | 'teams'
-  url: string
-  enabled: boolean
-  muted?: boolean
-}
-
-export interface DndConfig {
-  manualActive: boolean
-  scheduleEnabled: boolean
-  startTime: string
-  endTime: string
-}
+export type { DndConfig, ServiceConfig }
 
 export interface AppConfig {
   layout: {
@@ -148,17 +127,20 @@ export function initStore(userDataPath: string): void {
 
   // Migrations
   // Drop stale Google refresh token left over from the removed cloud sync
-  store.delete('auth' as any)
+  // legacy key not in AppConfig schema
+  ;(store as unknown as { delete(key: string): void }).delete('auth')
   // Clear stale Slack chooser URL so /client is used on next launch
   const lastVisited = store.get('lastVisited') || {}
   if (lastVisited['slack'] === 'https://app.slack.com') {
-    const { slack: _, ...rest } = lastVisited
+    const rest = { ...lastVisited }
+    delete rest.slack
     store.set('lastVisited', rest)
   }
 
   // Clear stale Teams lastVisited so /v2 is used on next launch
   if (lastVisited['teams'] === 'https://teams.microsoft.com') {
-    const { teams: _, ...rest } = lastVisited
+    const rest = { ...lastVisited }
+    delete rest.teams
     store.set('lastVisited', rest)
   }
 

@@ -1,13 +1,21 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import type {
+  DndConfig,
+  GeneralConfig,
+  GeneralConfigView,
+  ServiceConfig,
+  UpdateInfo
+} from '../shared/types'
 
 // Custom APIs for renderer
 const api = {
   getLayoutMode: (): Promise<'sidebar' | 'tabs'> => ipcRenderer.invoke('get-layout-mode'),
   setLayoutMode: (mode: 'sidebar' | 'tabs'): Promise<void> =>
     ipcRenderer.invoke('set-layout-mode', mode),
-  getServices: (): Promise<any[]> => ipcRenderer.invoke('get-services'),
-  saveServices: (services: any[]): Promise<void> => ipcRenderer.invoke('save-services', services),
+  getServices: (): Promise<ServiceConfig[]> => ipcRenderer.invoke('get-services'),
+  saveServices: (services: ServiceConfig[]): Promise<void> =>
+    ipcRenderer.invoke('save-services', services),
   switchService: (id: string | null): Promise<void> => ipcRenderer.invoke('switch-service', id),
   updateViewBounds: (bounds: {
     x: number
@@ -20,8 +28,11 @@ const api = {
     ipcRenderer.invoke('show-service-context-menu', id),
   clearServiceStorageData: (id: string): Promise<void> =>
     ipcRenderer.invoke('clear-service-storage-data', id),
-  onUnreadCountsUpdated: (callback: (data: any) => void): (() => void) => {
-    const handler = (_event: unknown, data: any): void => callback(data)
+  onUnreadCountsUpdated: (
+    callback: (data: { serviceId: string; count: number }) => void
+  ): (() => void) => {
+    const handler = (_event: IpcRendererEvent, data: { serviceId: string; count: number }): void =>
+      callback(data)
     ipcRenderer.on('unread-counts-updated', handler)
     return () => {
       ipcRenderer.removeListener('unread-counts-updated', handler)
@@ -31,19 +42,20 @@ const api = {
     ipcRenderer.invoke('update-taskbar-badge', dataUrl, description),
   showNativeNotification: (title: string, body: string): Promise<void> =>
     ipcRenderer.invoke('show-native-notification', title, body),
-  getDndConfig: (): Promise<any> => ipcRenderer.invoke('get-dnd-config'),
-  setDndConfig: (config: any): Promise<void> => ipcRenderer.invoke('set-dnd-config', config),
+  getDndConfig: (): Promise<DndConfig> => ipcRenderer.invoke('get-dnd-config'),
+  setDndConfig: (config: DndConfig): Promise<void> => ipcRenderer.invoke('set-dnd-config', config),
   getDndActive: (): Promise<boolean> => ipcRenderer.invoke('get-dnd-active'),
   doubleClickHeader: (): Promise<void> => ipcRenderer.invoke('double-click-header'),
   onDndStatusChanged: (callback: (active: boolean) => void): (() => void) => {
-    const handler = (_event: unknown, active: any): void => callback(active)
+    const handler = (_event: IpcRendererEvent, active: boolean): void => callback(active)
     ipcRenderer.on('dnd-status-changed', handler)
     return () => {
       ipcRenderer.removeListener('dnd-status-changed', handler)
     }
   },
-  onServicesUpdated: (callback: (services: any[]) => void): (() => void) => {
-    const handler = (_event: unknown, services: any): void => callback(services)
+  onServicesUpdated: (callback: (services: ServiceConfig[]) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, services: ServiceConfig[]): void =>
+      callback(services)
     ipcRenderer.on('services-updated', handler)
     return () => {
       ipcRenderer.removeListener('services-updated', handler)
@@ -52,8 +64,8 @@ const api = {
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
   getActiveUserStats: (): Promise<{ dau: number; mau: number } | null> =>
     ipcRenderer.invoke('get-active-user-stats'),
-  getGeneralConfig: (): Promise<any> => ipcRenderer.invoke('get-general-config'),
-  setGeneralConfig: (config: any): Promise<void> =>
+  getGeneralConfig: (): Promise<GeneralConfigView> => ipcRenderer.invoke('get-general-config'),
+  setGeneralConfig: (config: GeneralConfig): Promise<void> =>
     ipcRenderer.invoke('set-general-config', config),
   exportConfig: (): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('export-config'),
@@ -69,29 +81,29 @@ const api = {
       ipcRenderer.removeListener('update-checking', handler)
     }
   },
-  onUpdateAvailable: (callback: (info: any) => void): (() => void) => {
-    const handler = (_e: unknown, info: any): void => callback(info)
+  onUpdateAvailable: (callback: (info: UpdateInfo) => void): (() => void) => {
+    const handler = (_e: IpcRendererEvent, info: UpdateInfo): void => callback(info)
     ipcRenderer.on('update-available', handler)
     return () => {
       ipcRenderer.removeListener('update-available', handler)
     }
   },
-  onUpdateNotAvailable: (callback: (info: any) => void): (() => void) => {
-    const handler = (_e: unknown, info: any): void => callback(info)
+  onUpdateNotAvailable: (callback: (info: UpdateInfo) => void): (() => void) => {
+    const handler = (_e: IpcRendererEvent, info: UpdateInfo): void => callback(info)
     ipcRenderer.on('update-not-available', handler)
     return () => {
       ipcRenderer.removeListener('update-not-available', handler)
     }
   },
-  onUpdateDownloaded: (callback: (info: any) => void): (() => void) => {
-    const handler = (_e: unknown, info: any): void => callback(info)
+  onUpdateDownloaded: (callback: (info: UpdateInfo) => void): (() => void) => {
+    const handler = (_e: IpcRendererEvent, info: UpdateInfo): void => callback(info)
     ipcRenderer.on('update-downloaded', handler)
     return () => {
       ipcRenderer.removeListener('update-downloaded', handler)
     }
   },
   onUpdateError: (callback: (error: string) => void): (() => void) => {
-    const handler = (_e: unknown, err: any): void => callback(err)
+    const handler = (_e: IpcRendererEvent, err: string): void => callback(err)
     ipcRenderer.on('update-error', handler)
     return () => {
       ipcRenderer.removeListener('update-error', handler)
@@ -137,7 +149,7 @@ if (typeof document !== 'undefined') {
     })();
   `
 
-  const injectScript = () => {
+  const injectScript = (): void => {
     try {
       const script = document.createElement('script')
       script.textContent = scriptContent
@@ -155,8 +167,12 @@ if (typeof document !== 'undefined') {
   }
 
   // Listen to custom DOM events sent from the website context
-  window.addEventListener('gradd-notification-triggered', (e: any) => {
-    const { title, options } = e.detail
+  window.addEventListener('gradd-notification-triggered', (e: Event) => {
+    // No `instanceof CustomEvent`: the event is created in the page's world, so it fails the
+    // check in the isolated preload world. Structural guard on detail instead.
+    const detail = (e as CustomEvent<{ title: string; options?: { body?: string } } | null>).detail
+    if (!detail) return
+    const { title, options } = detail
     ipcRenderer.invoke('show-native-notification', title, options?.body || '').catch(console.error)
   })
 }

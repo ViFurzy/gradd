@@ -1,21 +1,13 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
+import type {
+  DndConfig,
+  GeneralConfig,
+  GeneralConfigView,
+  ServiceConfig,
+  UpdateInfo
+} from '../shared/types'
 
-export interface ServiceConfig {
-  id: string
-  name: string
-  type:
-    | 'messenger'
-    | 'whatsapp'
-    | 'telegram'
-    | 'slack'
-    | 'instagram'
-    | 'gadugadu'
-    | 'linkedin'
-    | 'teams'
-  url: string
-  enabled: boolean
-  muted?: boolean
-}
+export type { DndConfig, ServiceConfig }
 
 export interface GraddAPI {
   getLayoutMode(): Promise<'sidebar' | 'tabs'>
@@ -38,38 +30,22 @@ export interface GraddAPI {
   onServicesUpdated(callback: (services: ServiceConfig[]) => void): () => void
   getAppVersion(): Promise<string>
   getActiveUserStats(): Promise<{ dau: number; mau: number } | null>
-  getGeneralConfig(): Promise<{
-    closeToTray: boolean
-    showTabLabels: boolean
-    startWithWindows: boolean
-    hasAppLock: boolean
-  }>
-  setGeneralConfig(config: {
-    closeToTray: boolean
-    showTabLabels: boolean
-    startWithWindows: boolean
-  }): Promise<void>
+  getGeneralConfig(): Promise<GeneralConfigView>
+  setGeneralConfig(config: GeneralConfig): Promise<void>
   exportConfig(): Promise<{ success: boolean; error?: string }>
   importConfig(): Promise<{ success: boolean; error?: string }>
   clearConfig(): Promise<void>
   checkForUpdates(): Promise<void>
   installUpdate(): Promise<void>
   onUpdateChecking(callback: () => void): () => void
-  onUpdateAvailable(callback: (info: any) => void): () => void
-  onUpdateNotAvailable(callback: (info: any) => void): () => void
-  onUpdateDownloaded(callback: (info: any) => void): () => void
+  onUpdateAvailable(callback: (info: UpdateInfo) => void): () => void
+  onUpdateNotAvailable(callback: (info: UpdateInfo) => void): () => void
+  onUpdateDownloaded(callback: (info: UpdateInfo) => void): () => void
   onUpdateError(callback: (error: string) => void): () => void
   openExternal(url: string): Promise<void>
   setAppPin(pin: string, currentPin?: string): Promise<boolean>
   verifyAppPin(pin: string): Promise<{ ok: boolean; retryAfterMs?: number }>
   onLockApp(callback: () => void): () => void
-}
-
-export interface DndConfig {
-  manualActive: boolean
-  scheduleEnabled: boolean
-  startTime: string
-  endTime: string
 }
 
 declare global {

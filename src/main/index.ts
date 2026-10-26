@@ -25,7 +25,9 @@ import { fileURLToPath } from 'url'
 import { readFileSync, writeFileSync } from 'fs'
 import { randomUUID } from 'crypto'
 import icon from '../../resources/icon.png?asset'
-import { store, initStore, DndConfig, ServiceConfig, defaultServices } from './store.js'
+import { store, initStore, defaultServices } from './store.js'
+import type { AppConfig } from './store.js'
+import type { DndConfig, ServiceConfig } from '../shared/types'
 import { hashPin, verifyPin } from './crypto.js'
 import { recordHeartbeat, getActiveUserStats } from './firebase.js'
 import pkg from 'electron-updater'
@@ -68,6 +70,11 @@ let saveTimeout: NodeJS.Timeout | null = null
 let windowHiddenAt: number | null = null
 
 const serviceViews = new Map<string, WebContentsViewType>()
+
+// destroy() exists at runtime but is absent from Electron's bundled WebContents typings
+function destroyView(view: WebContentsViewType): void {
+  ;(view.webContents as unknown as { destroy(): void }).destroy()
+}
 // Last-visited URLs waiting to be written to the store (debounced; see flushLastVisited).
 const pendingLastVisited = new Map<string, string>()
 let lastVisitedTimer: NodeJS.Timeout | null = null
@@ -224,7 +231,7 @@ function checkPin(pin: unknown): { ok: boolean; retryAfterMs?: number } {
   pinFailures = 0
   pinLockedUntil = 0
   if (result.legacy) {
-    const general = (store.get('general') || {}) as any
+    const general: AppConfig['general'] = { ...store.get('general') }
     general.appLockPin = hashPin(pin as string)
     store.set('general', general)
   }
@@ -406,7 +413,7 @@ async function scrapeUnreadCount(
                 const r = +rgb[0], g = +rgb[1], b = +rgb[2];
                 if (Math.max(r,g,b) - Math.min(r,g,b) < 30) return;
               }
-            } catch (_) {}
+            } catch {}
             const text = el.textContent.trim();
             if (/^\\d+$/.test(text)) {
               const num = parseInt(text, 10);
@@ -491,7 +498,7 @@ async function scrapeUnreadCount(
                   dotCount++;
                   break;
                 }
-              } catch (_) {}
+              } catch {}
             }
           }
           return dotCount;
@@ -559,7 +566,7 @@ async function scrapeUnreadCount(
                   dotCount++;
                   break;
                 }
-              } catch (_) {}
+              } catch {}
             }
           }
           return dotCount;
@@ -630,7 +637,7 @@ async function scrapeUnreadCount(
                   dotCount++;
                   break;
                 }
-              } catch (_) {}
+              } catch {}
             }
           }
           return dotCount;
@@ -714,7 +721,7 @@ async function scrapeUnreadCount(
       )
       .catch(() => 0)
     return typeof genericCount === 'number' ? genericCount : 0
-  } catch (error) {
+  } catch {
     return 0
   }
 }
@@ -757,9 +764,9 @@ function recreateServiceView(serviceId: string): void {
   try {
     if (!existingView.webContents.isDestroyed()) {
       mainWindow.contentView.removeChildView(existingView)
-      ;(existingView.webContents as any).destroy()
+      destroyView(existingView)
     }
-  } catch (_) {
+  } catch {
     /* ignore */
   }
   serviceViews.delete(serviceId)
@@ -793,9 +800,9 @@ function unloadIdleServiceViews(): void {
     try {
       if (view && !view.webContents.isDestroyed()) {
         if (mainWindow) mainWindow.contentView.removeChildView(view)
-        ;(view.webContents as any).destroy()
+        destroyView(view)
       }
-    } catch (_) {
+    } catch {
       /* ignore */
     }
     serviceViews.delete(serviceId)
@@ -1315,7 +1322,10 @@ function createWindow(): void {
 
   // Pipe renderer console messages to main process stdout (new single-object event API)
   mainWindow.webContents.on('console-message', (event) => {
-    const { level, message, line, sourceId } = event as any
+    const { level, message, line, sourceId } = event as typeof event & {
+      line: number
+      sourceId: string
+    }
     const levels = ['DEBUG', 'INFO', 'WARN', 'ERROR']
     console.log(`[Renderer ${levels[level] || 'LOG'}] ${message} (at ${sourceId}:${line})`)
   })
@@ -1470,7 +1480,7 @@ function validateDnd(dnd: unknown): string | null {
 }
 
 // Keep only known fields (drops renderer-only transient state such as unreadCount).
-const sanitizeService = (s: any): ServiceConfig => ({
+const sanitizeService = (s: ServiceConfig): ServiceConfig => ({
   id: s.id,
   name: s.name,
   type: s.type,
@@ -1597,8 +1607,8 @@ app.whenReady().then(() => {
             if (mainWindow && !view.webContents.isDestroyed()) {
               mainWindow.contentView.removeChildView(view)
             }
-            ;(view.webContents as any).destroy()
-          } catch (_) {
+            destroyView(view)
+          } catch {
             /* ignore */
           }
           serviceViews.delete(prev.id)
@@ -1804,36 +1814,39 @@ app.whenReady().then(() => {
   // (b) Immediately rescrape that service so the badge updates without waiting for the
   //     8-second polling cycle. Title-based detection means no DOM touching for services
   //     like Telegram that already put the count in document.title.
-  ipcMain.on('service-notification', (event, payload: any) => {
-    const title = String(payload?.title ?? '').slice(0, 200)
-    const body = String(payload?.body ?? '').slice(0, 1000)
-    // Show native toast
-    if (!dndActive) {
-      try {
-        const notif = new Notification({ title, body, silent: false })
-        notif.on('click', () => {
-          mainWindow?.show()
-          mainWindow?.focus()
-        })
-        notif.show()
-      } catch {}
-    }
-    // Identify the sending service and rescrape immediately
-    for (const [serviceId, view] of serviceViews) {
-      if (view.webContents.id === event.sender.id) {
-        const services = store.get('services') || []
-        const service = services.find((s) => s.id === serviceId)
-        if (service) {
-          scrapeUnreadCount(view, service.type, serviceUnreads.get(serviceId) || 0)
-            .then((count) => {
-              handleUnreadCountChange(serviceId, count)
-            })
-            .catch(() => {})
+  ipcMain.on(
+    'service-notification',
+    (event, payload: { title?: unknown; body?: unknown } | null | undefined) => {
+      const title = String(payload?.title ?? '').slice(0, 200)
+      const body = String(payload?.body ?? '').slice(0, 1000)
+      // Show native toast
+      if (!dndActive) {
+        try {
+          const notif = new Notification({ title, body, silent: false })
+          notif.on('click', () => {
+            mainWindow?.show()
+            mainWindow?.focus()
+          })
+          notif.show()
+        } catch {}
+      }
+      // Identify the sending service and rescrape immediately
+      for (const [serviceId, view] of serviceViews) {
+        if (view.webContents.id === event.sender.id) {
+          const services = store.get('services') || []
+          const service = services.find((s) => s.id === serviceId)
+          if (service) {
+            scrapeUnreadCount(view, service.type, serviceUnreads.get(serviceId) || 0)
+              .then((count) => {
+                handleUnreadCountChange(serviceId, count)
+              })
+              .catch(() => {})
+          }
+          break
         }
-        break
       }
     }
-  })
+  )
 
   ipcMain.handle('show-native-notification', (_, rawTitle: unknown, rawBody: unknown) => {
     if (dndActive) return
@@ -1861,8 +1874,9 @@ app.whenReady().then(() => {
     return store.get('dnd')
   })
 
-  ipcMain.handle('set-dnd-config', (_, config: any) => {
-    if (validateDnd(config)) return
+  ipcMain.handle('set-dnd-config', (_, raw: unknown) => {
+    if (validateDnd(raw)) return
+    const config = raw as DndConfig
     store.set('dnd', {
       manualActive: config.manualActive,
       scheduleEnabled: config.scheduleEnabled,
@@ -1917,7 +1931,7 @@ app.whenReady().then(() => {
     if (typeof closeToTray === 'boolean') general.closeToTray = closeToTray
     if (typeof showTabLabels === 'boolean') general.showTabLabels = showTabLabels
     delete general.hasAppLock
-    store.set('general', general as any)
+    store.set('general', general as AppConfig['general'])
     if (typeof startWithWindows === 'boolean') {
       app.setLoginItemSettings({ openAtLogin: startWithWindows })
     }
@@ -2039,12 +2053,13 @@ app.whenReady().then(() => {
       }
 
       const data = parsedData as Record<string, unknown>
-      if (data.services) store.set('services', (data.services as any[]).map(sanitizeService))
+      if (data.services)
+        store.set('services', (data.services as ServiceConfig[]).map(sanitizeService))
       if (data.dnd) store.set('dnd', data.dnd)
       if (data.layout) store.set('layout', data.layout)
       if (data.general) {
         const incoming = data.general as Record<string, unknown>
-        const merged = { ...((store.get('general') || {}) as any) }
+        const merged: AppConfig['general'] = { ...store.get('general') }
         if (typeof incoming.closeToTray === 'boolean') merged.closeToTray = incoming.closeToTray
         if (typeof incoming.showTabLabels === 'boolean')
           merged.showTabLabels = incoming.showTabLabels
@@ -2078,7 +2093,7 @@ app.whenReady().then(() => {
     if (typeof pin !== 'string' || (pin !== '' && !/^\d{4}$/.test(pin))) return false
     if (store.get('general')?.appLockPin && !checkPin(currentPin).ok) return false
     // Re-read: checkPin may have migrated a legacy PIN
-    const general = (store.get('general') || {}) as any
+    const general: AppConfig['general'] = { ...store.get('general') }
     if (!pin) {
       delete general.appLockPin
       store.set('general', general)
@@ -2157,10 +2172,9 @@ app.on('before-quit', () => {
   for (const [, view] of serviceViews) {
     try {
       if (!view.webContents.isDestroyed()) {
-        // destroy() exists at runtime but is absent from Electron's bundled type stubs
-        ;(view.webContents as any).destroy()
+        destroyView(view)
       }
-    } catch (_) {
+    } catch {
       // Ignore errors during shutdown
     }
   }

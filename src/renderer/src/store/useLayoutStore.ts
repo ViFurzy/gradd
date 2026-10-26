@@ -1,28 +1,10 @@
 import { create } from 'zustand'
+import type { DndConfig, ServiceConfig as SharedServiceConfig } from '../../../shared/types'
 
-export interface ServiceConfig {
-  id: string
-  name: string
-  type:
-    | 'messenger'
-    | 'whatsapp'
-    | 'telegram'
-    | 'slack'
-    | 'instagram'
-    | 'gadugadu'
-    | 'linkedin'
-    | 'teams'
-  url: string
-  enabled: boolean
+export type { DndConfig }
+
+export interface ServiceConfig extends SharedServiceConfig {
   unreadCount?: number
-  muted?: boolean
-}
-
-export interface DndConfig {
-  manualActive: boolean
-  scheduleEnabled: boolean
-  startTime: string
-  endTime: string
 }
 
 interface LayoutState {

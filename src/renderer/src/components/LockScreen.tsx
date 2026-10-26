@@ -11,7 +11,7 @@ export default function LockScreen(): React.JSX.Element {
     useShallow((s) => ({ setLocked: s.setLocked, verifyAppPin: s.verifyAppPin }))
   )
 
-  const handleKeyPress = async (num: string) => {
+  const handleKeyPress = async (num: string): Promise<void> => {
     if (error) {
       setError(false)
       setLockoutSec(0)
@@ -33,7 +33,7 @@ export default function LockScreen(): React.JSX.Element {
     }
   }
 
-  const handleDelete = () => {
+  const handleDelete = (): void => {
     if (error) {
       setError(false)
       setLockoutSec(0)
