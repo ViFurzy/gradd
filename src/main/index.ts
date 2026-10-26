@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url'
 import { readFileSync, writeFileSync } from 'fs'
 import { randomUUID } from 'crypto'
 import icon from '../../resources/icon.png?asset'
-import { store, initStore, DndConfig, defaultServices } from './store.js'
+import { store, initStore, DndConfig, ServiceConfig, defaultServices } from './store.js'
 import { encryptToken, decryptToken } from './crypto.js'
 import { recordHeartbeat, getActiveUserStats } from './firebase.js'
 import pkg from 'electron-updater'
@@ -1292,6 +1292,44 @@ function createTray(): void {
 
 const ALLOWED_SERVICE_TYPES = ['messenger', 'whatsapp', 'telegram', 'slack', 'instagram', 'gadugadu', 'linkedin', 'teams']
 
+function validateService(svc: unknown): string | null {
+  if (!svc || typeof svc !== 'object') return 'Each service must be an object.'
+  const s = svc as Record<string, unknown>
+  if (typeof s.id !== 'string' || !s.id) return 'Service "id" must be a non-empty string.'
+  if (typeof s.name !== 'string' || !s.name) return 'Service "name" must be a non-empty string.'
+  if (typeof s.enabled !== 'boolean') return 'Service "enabled" must be a boolean.'
+  if (s.muted !== undefined && typeof s.muted !== 'boolean') return 'Service "muted" must be a boolean.'
+  if (!ALLOWED_SERVICE_TYPES.includes(s.type as string)) return `Service type "${s.type}" is not recognised.`
+  if (typeof s.url !== 'string') return 'Service "url" must be a string.'
+  try {
+    const parsed = new URL(s.url as string)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return `Service URL "${s.url}" must use http or https.`
+  } catch {
+    return `Service URL "${s.url}" is not a valid URL.`
+  }
+  return null
+}
+
+function validateDnd(dnd: unknown): string | null {
+  if (!dnd || typeof dnd !== 'object' || Array.isArray(dnd)) return '"dnd" must be an object.'
+  const d = dnd as Record<string, unknown>
+  if (typeof d.manualActive !== 'boolean') return '"dnd.manualActive" must be a boolean.'
+  if (typeof d.scheduleEnabled !== 'boolean') return '"dnd.scheduleEnabled" must be a boolean.'
+  if (typeof d.startTime !== 'string' || !/^\d{2}:\d{2}$/.test(d.startTime as string)) return '"dnd.startTime" must be HH:MM format.'
+  if (typeof d.endTime !== 'string' || !/^\d{2}:\d{2}$/.test(d.endTime as string)) return '"dnd.endTime" must be HH:MM format.'
+  return null
+}
+
+// Keep only known fields (drops renderer-only transient state such as unreadCount).
+const sanitizeService = (s: any): ServiceConfig => ({
+  id: s.id,
+  name: s.name,
+  type: s.type,
+  url: s.url,
+  enabled: s.enabled,
+  ...(typeof s.muted === 'boolean' ? { muted: s.muted } : {})
+})
+
 function validateImportedConfig(data: unknown): { valid: boolean; reason?: string } {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     return { valid: false, reason: 'Root value must be an object.' }
@@ -1301,37 +1339,14 @@ function validateImportedConfig(data: unknown): { valid: boolean; reason?: strin
   if (obj.services !== undefined) {
     if (!Array.isArray(obj.services)) return { valid: false, reason: '"services" must be an array.' }
     for (const svc of obj.services) {
-      if (!svc || typeof svc !== 'object') return { valid: false, reason: 'Each service must be an object.' }
-      const s = svc as Record<string, unknown>
-      if (typeof s.id !== 'string' || !s.id) return { valid: false, reason: 'Service "id" must be a non-empty string.' }
-      if (typeof s.name !== 'string' || !s.name) return { valid: false, reason: 'Service "name" must be a non-empty string.' }
-      if (typeof s.enabled !== 'boolean') return { valid: false, reason: 'Service "enabled" must be a boolean.' }
-      if (!ALLOWED_SERVICE_TYPES.includes(s.type as string)) {
-        return { valid: false, reason: `Service type "${s.type}" is not recognised.` }
-      }
-      if (typeof s.url !== 'string') return { valid: false, reason: 'Service "url" must be a string.' }
-      try {
-        const parsed = new URL(s.url as string)
-        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-          return { valid: false, reason: `Service URL "${s.url}" must use http or https.` }
-        }
-      } catch {
-        return { valid: false, reason: `Service URL "${s.url}" is not a valid URL.` }
-      }
+      const reason = validateService(svc)
+      if (reason) return { valid: false, reason }
     }
   }
 
   if (obj.dnd !== undefined) {
-    if (typeof obj.dnd !== 'object' || Array.isArray(obj.dnd)) return { valid: false, reason: '"dnd" must be an object.' }
-    const dnd = obj.dnd as Record<string, unknown>
-    if (typeof dnd.manualActive !== 'boolean') return { valid: false, reason: '"dnd.manualActive" must be a boolean.' }
-    if (typeof dnd.scheduleEnabled !== 'boolean') return { valid: false, reason: '"dnd.scheduleEnabled" must be a boolean.' }
-    if (typeof dnd.startTime !== 'string' || !/^\d{2}:\d{2}$/.test(dnd.startTime as string)) {
-      return { valid: false, reason: '"dnd.startTime" must be HH:MM format.' }
-    }
-    if (typeof dnd.endTime !== 'string' || !/^\d{2}:\d{2}$/.test(dnd.endTime as string)) {
-      return { valid: false, reason: '"dnd.endTime" must be HH:MM format.' }
-    }
+    const reason = validateDnd(obj.dnd)
+    if (reason) return { valid: false, reason }
   }
 
   if (obj.layout !== undefined) {
@@ -1395,6 +1410,7 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('set-layout-mode', (_, mode: 'sidebar' | 'tabs') => {
+    if (mode !== 'sidebar' && mode !== 'tabs') return
     store.set('layout.mode', mode)
   })
 
@@ -1402,7 +1418,19 @@ app.whenReady().then(() => {
     return store.get('services') || []
   })
 
-  ipcMain.handle('save-services', (_, services: any[]) => {
+  ipcMain.handle('save-services', (_, payload: unknown) => {
+    if (!Array.isArray(payload)) {
+      console.error('save-services rejected: payload must be an array')
+      return false
+    }
+    for (const svc of payload) {
+      const reason = validateService(svc)
+      if (reason) {
+        console.error('save-services rejected:', reason)
+        return false
+      }
+    }
+    const services = payload.map(sanitizeService)
     const previousServices = store.get('services') || []
     store.set('services', services)
     applyDndState()
@@ -1425,9 +1453,11 @@ app.whenReady().then(() => {
         }
       }
     }
+    return true
   })
 
   ipcMain.handle('switch-service', (_, id: string | null) => {
+    if (id !== null && (typeof id !== 'string' || !(store.get('services') || []).some((s) => s.id === id))) return
     if (activeServiceId === id) return
 
     if (activeServiceId && mainWindow) {
@@ -1459,7 +1489,14 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('update-view-bounds', (_, bounds: { x: number, y: number, width: number, height: number }) => {
-    contentBounds = bounds
+    if (!bounds || typeof bounds !== 'object' || ![bounds.x, bounds.y, bounds.width, bounds.height].every(Number.isFinite)) return
+    const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n))
+    contentBounds = {
+      x: clamp(bounds.x, -20000, 20000),
+      y: clamp(bounds.y, -20000, 20000),
+      width: clamp(bounds.width, 0, 20000),
+      height: clamp(bounds.height, 0, 20000)
+    }
     if (activeServiceId) {
       const activeView = serviceViews.get(activeServiceId)
       if (activeView) {
@@ -1576,9 +1613,10 @@ app.whenReady().then(() => {
     if (!dataUrl) {
       win.setOverlayIcon(null, '')
     } else {
+      if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png;base64,') || dataUrl.length > 20_000) return
       try {
         const img = nativeImage.createFromDataURL(dataUrl)
-        win.setOverlayIcon(img, description)
+        win.setOverlayIcon(img, String(description ?? '').slice(0, 200))
       } catch (error) {
         console.error('Failed to set overlay icon:', error)
       }
@@ -1590,7 +1628,9 @@ app.whenReady().then(() => {
   // (b) Immediately rescrape that service so the badge updates without waiting for the
   //     8-second polling cycle. Title-based detection means no DOM touching for services
   //     like Telegram that already put the count in document.title.
-  ipcMain.on('service-notification', (event, { title, body }: { title: string; body: string }) => {
+  ipcMain.on('service-notification', (event, payload: any) => {
+    const title = String(payload?.title ?? '').slice(0, 200)
+    const body = String(payload?.body ?? '').slice(0, 1000)
     // Show native toast
     if (!dndActive) {
       try {
@@ -1614,12 +1654,12 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('show-native-notification', (_, title: string, body: string) => {
+  ipcMain.handle('show-native-notification', (_, rawTitle: unknown, rawBody: unknown) => {
     if (dndActive) return
     try {
       const nativeNotif = new Notification({
-        title,
-        body,
+        title: String(rawTitle ?? '').slice(0, 200),
+        body: String(rawBody ?? '').slice(0, 1000),
         silent: false
       })
 
@@ -1641,7 +1681,13 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('set-dnd-config', (_, config: any) => {
-    store.set('dnd', config)
+    if (validateDnd(config)) return
+    store.set('dnd', {
+      manualActive: config.manualActive,
+      scheduleEnabled: config.scheduleEnabled,
+      startTime: config.startTime,
+      endTime: config.endTime
+    })
     evaluateDndState()
   })
 
@@ -1812,7 +1858,7 @@ app.whenReady().then(() => {
       }
 
       const data = parsedData as Record<string, unknown>;
-      if (data.services) store.set('services', data.services);
+      if (data.services) store.set('services', (data.services as any[]).map(sanitizeService));
       if (data.dnd) store.set('dnd', data.dnd);
       if (data.layout) store.set('layout', data.layout);
       if (data.general) {
