@@ -43,8 +43,8 @@ export interface GraddAPI {
   onUpdateDownloaded(callback: (info: any) => void): () => void
   onUpdateError(callback: (error: string) => void): () => void
   openExternal(url: string): Promise<void>
-  setAppPin(pin: string): Promise<boolean>
-  verifyAppPin(pin: string): Promise<boolean>
+  setAppPin(pin: string, currentPin?: string): Promise<boolean>
+  verifyAppPin(pin: string): Promise<{ ok: boolean; retryAfterMs?: number }>
   onLockApp(callback: () => void): () => void
 }
 

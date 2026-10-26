@@ -6,11 +6,13 @@ import { LockKey, WarningCircle } from '@phosphor-icons/react'
 export default function LockScreen(): React.JSX.Element {
   const [pin, setPin] = useState('')
   const [error, setError] = useState(false)
+  const [lockoutSec, setLockoutSec] = useState(0)
   const { setLocked, verifyAppPin } = useLayoutStore(useShallow((s) => ({ setLocked: s.setLocked, verifyAppPin: s.verifyAppPin })))
 
   const handleKeyPress = async (num: string) => {
     if (error) {
       setError(false)
+      setLockoutSec(0)
       setPin(num)
       return
     }
@@ -19,10 +21,11 @@ export default function LockScreen(): React.JSX.Element {
     setPin(newPin)
 
     if (newPin.length === 4) {
-      const isValid = await verifyAppPin(newPin)
-      if (isValid) {
+      const result = await verifyAppPin(newPin)
+      if (result.ok) {
         setLocked(false)
       } else {
+        setLockoutSec(result.retryAfterMs ? Math.ceil(result.retryAfterMs / 1000) : 0)
         setError(true)
       }
     }
@@ -31,6 +34,7 @@ export default function LockScreen(): React.JSX.Element {
   const handleDelete = () => {
     if (error) {
       setError(false)
+      setLockoutSec(0)
       setPin('')
     } else {
       setPin(pin.slice(0, -1))
@@ -60,7 +64,7 @@ export default function LockScreen(): React.JSX.Element {
         {error && (
           <div className="flex items-center gap-2 text-destructive text-xs font-medium mb-6 animate-pulse">
             <WarningCircle size={14} weight="bold" />
-            <span>Incorrect PIN</span>
+            <span>{lockoutSec > 0 ? `Too many attempts. Try again in ${lockoutSec}s` : 'Incorrect PIN'}</span>
           </div>
         )}
 

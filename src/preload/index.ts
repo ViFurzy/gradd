@@ -71,8 +71,8 @@ const api = {
     return () => { ipcRenderer.removeListener('update-error', handler) }
   },
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('open-external', url),
-  setAppPin: (pin: string): Promise<boolean> => ipcRenderer.invoke('set-app-pin', pin),
-  verifyAppPin: (pin: string): Promise<boolean> => ipcRenderer.invoke('verify-app-pin', pin),
+  setAppPin: (pin: string, currentPin?: string): Promise<boolean> => ipcRenderer.invoke('set-app-pin', pin, currentPin),
+  verifyAppPin: (pin: string): Promise<{ ok: boolean; retryAfterMs?: number }> => ipcRenderer.invoke('verify-app-pin', pin),
   onLockApp: (callback: () => void): (() => void) => {
     const handler = (): void => callback()
     ipcRenderer.on('lock-app', handler)

@@ -7,7 +7,7 @@ import { readFileSync, writeFileSync } from 'fs'
 import { randomUUID } from 'crypto'
 import icon from '../../resources/icon.png?asset'
 import { store, initStore, DndConfig, ServiceConfig, defaultServices } from './store.js'
-import { encryptToken, decryptToken } from './crypto.js'
+import { hashPin, verifyPin } from './crypto.js'
 import { recordHeartbeat, getActiveUserStats } from './firebase.js'
 import pkg from 'electron-updater'
 let isDev = false // set in app.whenReady
@@ -174,6 +174,35 @@ function getServiceDomains(type: string): string[] {
     default:
       return []
   }
+}
+
+// ponytail: in-memory limiter, resets on app restart; persist to store if restarts become an attack path.
+let pinFailures = 0
+let pinLockedUntil = 0
+
+function checkPin(pin: unknown): { ok: boolean; retryAfterMs?: number } {
+  const stored = store.get('general')?.appLockPin
+  if (!stored) return { ok: true }
+  const now = Date.now()
+  if (now < pinLockedUntil) return { ok: false, retryAfterMs: pinLockedUntil - now }
+  const result = typeof pin === 'string' ? verifyPin(pin, stored) : { ok: false, legacy: false }
+  if (!result.ok) {
+    pinFailures++
+    if (pinFailures >= 5) {
+      const wait = Math.min(30_000 * 2 ** (pinFailures - 5), 15 * 60_000)
+      pinLockedUntil = now + wait
+      return { ok: false, retryAfterMs: wait }
+    }
+    return { ok: false }
+  }
+  pinFailures = 0
+  pinLockedUntil = 0
+  if (result.legacy) {
+    const general = (store.get('general') || {}) as any
+    general.appLockPin = hashPin(pin as string)
+    store.set('general', general)
+  }
+  return { ok: true }
 }
 
 const permissionPartitions = new Set<string>()
@@ -1891,33 +1920,34 @@ app.whenReady().then(() => {
   });
   
   // --- App Lock ---
-  ipcMain.handle('set-app-pin', (_, pin: string) => {
+  ipcMain.handle('set-app-pin', (_, pin: unknown, currentPin?: unknown) => {
+    // Format errors must not burn lockout attempts, so validate before checkPin.
+    if (typeof pin !== 'string' || (pin !== '' && !/^\d{4}$/.test(pin))) return false;
+    if (store.get('general')?.appLockPin && !checkPin(currentPin).ok) return false;
+    // Re-read: checkPin may have migrated a legacy PIN
+    const general = (store.get('general') || {}) as any;
     if (!pin) {
-      const general = (store.get('general') || {}) as any;
       delete general.appLockPin;
       store.set('general', general);
       appLocked = false;
       return true;
     }
-    const encrypted = encryptToken(pin);
-    const general = (store.get('general') || {}) as any;
-    general.appLockPin = encrypted;
+    general.appLockPin = hashPin(pin);
     store.set('general', general);
     return true;
   });
 
-  ipcMain.handle('verify-app-pin', (_, pin: string) => {
-    const general = store.get('general');
-    if (!general?.appLockPin) return true;
-    const decrypted = decryptToken(general.appLockPin);
-    if (decrypted !== pin) return false;
+  ipcMain.handle('verify-app-pin', (_, pin: unknown) => {
+    if (!store.get('general')?.appLockPin) return { ok: true };
+    const result = checkPin(pin);
+    if (!result.ok) return result;
     // Unlock lives here (not in a separate IPC) so the renderer can't unlock without the PIN
     appLocked = false;
     if (activeServiceId) {
       const view = serviceViews.get(activeServiceId);
       if (view && !view.webContents.isDestroyed()) view.setBounds(contentBounds);
     }
-    return true;
+    return { ok: true };
   });
 
   powerMonitor.on('lock-screen', lockApp);

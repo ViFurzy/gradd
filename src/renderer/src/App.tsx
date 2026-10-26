@@ -692,6 +692,29 @@ function SettingsPanel(): React.JSX.Element {
   const [updateError, setUpdateError] = useState<string>('')
   const [stats, setStats] = useState<{ dau: number; mau: number } | null>(null)
   const [statsError, setStatsError] = useState<string>('')
+  const [pinMode, setPinMode] = useState<'set' | 'change' | 'remove' | null>(null)
+  const [pinNew, setPinNew] = useState('')
+  const [pinCurrent, setPinCurrent] = useState('')
+  const [pinError, setPinError] = useState('')
+  const closePinForm = (): void => {
+    setPinMode(null)
+    setPinNew('')
+    setPinCurrent('')
+    setPinError('')
+  }
+  const submitPinForm = async (): Promise<void> => {
+    if (pinMode !== 'remove' && !/^\d{4}$/.test(pinNew)) {
+      setPinError('PIN must be exactly 4 digits.')
+      return
+    }
+    if (pinMode !== 'set' && !/^\d{4}$/.test(pinCurrent)) {
+      setPinError('Enter your current 4-digit PIN.')
+      return
+    }
+    const ok = await setAppPin(pinMode === 'remove' ? '' : pinNew, pinMode === 'set' ? undefined : pinCurrent)
+    if (ok) closePinForm()
+    else setPinError(pinMode === 'set' ? 'Could not set PIN.' : 'Current PIN is incorrect, or too many attempts. Try again later.')
+  }
 
   useEffect(() => {
     window.api.getAppVersion()
@@ -860,13 +883,9 @@ function SettingsPanel(): React.JSX.Element {
             <div className="flex items-center gap-3">
               {generalConfig?.hasAppLock && (
                 <button
-                  onClick={async () => {
-                    const pin = prompt('Enter a new 4-digit PIN (e.g. 1234):')
-                    if (pin && /^\d{4}$/.test(pin)) {
-                      await setAppPin(pin)
-                    } else if (pin) {
-                      alert('Invalid PIN. Must be exactly 4 digits.')
-                    }
+                  onClick={() => {
+                    closePinForm()
+                    setPinMode('change')
                   }}
                   className="no-drag px-3 py-1.5 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none border bg-secondary hover:bg-hover-surface text-text-primary border-surface-border"
                 >
@@ -874,17 +893,9 @@ function SettingsPanel(): React.JSX.Element {
                 </button>
               )}
               <button
-                onClick={async () => {
-                  if (generalConfig?.hasAppLock) {
-                    await setAppPin('')
-                  } else {
-                    const pin = prompt('Enter a new 4-digit PIN (e.g. 1234):')
-                    if (pin && /^\d{4}$/.test(pin)) {
-                      await setAppPin(pin)
-                    } else if (pin) {
-                      alert('Invalid PIN. Must be exactly 4 digits.')
-                    }
-                  }
+                onClick={() => {
+                  closePinForm()
+                  setPinMode(generalConfig?.hasAppLock ? 'remove' : 'set')
                 }}
                 className={`no-drag relative w-10 h-6 rounded-full transition-colors duration-150 cursor-pointer focus:outline-none ${
                   generalConfig?.hasAppLock ? 'bg-accent' : 'bg-dominant border border-surface-border'
@@ -898,6 +909,56 @@ function SettingsPanel(): React.JSX.Element {
               </button>
             </div>
           </div>
+          {pinMode && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                void submitPinForm()
+              }}
+              className="flex flex-col gap-3 border-t border-surface-border/50 pt-4"
+            >
+              <div className="flex items-center gap-3">
+                {pinMode !== 'set' && (
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={4}
+                    autoFocus
+                    value={pinCurrent}
+                    onChange={(e) => setPinCurrent(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Current PIN"
+                    className="no-drag w-28 px-3 py-1.5 text-xs rounded border border-surface-border bg-dominant text-text-primary focus:outline-none focus:border-accent"
+                  />
+                )}
+                {pinMode !== 'remove' && (
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={4}
+                    autoFocus={pinMode === 'set'}
+                    value={pinNew}
+                    onChange={(e) => setPinNew(e.target.value.replace(/\D/g, ''))}
+                    placeholder="New PIN"
+                    className="no-drag w-28 px-3 py-1.5 text-xs rounded border border-surface-border bg-dominant text-text-primary focus:outline-none focus:border-accent"
+                  />
+                )}
+                <button
+                  type="submit"
+                  className="no-drag px-3 py-1.5 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none border bg-accent text-white border-accent"
+                >
+                  {pinMode === 'remove' ? 'Remove PIN' : 'Save PIN'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closePinForm}
+                  className="no-drag px-3 py-1.5 text-xs font-semibold leading-[1.4] rounded transition-all duration-150 cursor-pointer select-none border bg-secondary hover:bg-hover-surface text-text-primary border-surface-border"
+                >
+                  Cancel
+                </button>
+              </div>
+              {pinError && <p className="text-xs text-destructive leading-[1.4]">{pinError}</p>}
+            </form>
+          )}
         </section>
 
         {/* Section 1.6: Local Backup */}

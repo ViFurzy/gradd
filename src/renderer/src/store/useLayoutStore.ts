@@ -39,8 +39,8 @@ interface LayoutState {
   setDndActiveState: (active: boolean) => void
   reorderServices: (enabledServices: ServiceConfig[]) => void
   updateGeneralConfig: (config: Partial<{ closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean }>) => Promise<void>
-  setAppPin: (pin: string) => Promise<boolean>
-  verifyAppPin: (pin: string) => Promise<boolean>
+  setAppPin: (pin: string, currentPin?: string) => Promise<boolean>
+  verifyAppPin: (pin: string) => Promise<{ ok: boolean; retryAfterMs?: number }>
 }
 
 export const useLayoutStore = create<LayoutState>((set, get) => ({
@@ -155,8 +155,8 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     const disabledServices = get().services.filter((s) => !s.enabled)
     set({ services: [...enabledServices, ...disabledServices] })
   },
-  setAppPin: async (pin: string) => {
-    const success = await window.api.setAppPin(pin)
+  setAppPin: async (pin: string, currentPin?: string) => {
+    const success = await window.api.setAppPin(pin, currentPin)
     if (success) {
       set((state) => ({ generalConfig: { ...state.generalConfig, hasAppLock: !!pin } }))
     }
