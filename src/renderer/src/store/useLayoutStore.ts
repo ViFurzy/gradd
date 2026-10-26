@@ -37,7 +37,7 @@ interface LayoutState {
   isDndActive: boolean
   updateDndConfig: (config: Partial<DndConfig>) => Promise<void>
   setDndActiveState: (active: boolean) => void
-  reorderServices: (enabledServices: ServiceConfig[]) => Promise<void>
+  reorderServices: (enabledServices: ServiceConfig[]) => void
   updateGeneralConfig: (config: Partial<{ closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean }>) => Promise<void>
   setAppPin: (pin: string) => Promise<boolean>
   verifyAppPin: (pin: string) => Promise<boolean>
@@ -133,8 +133,9 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     }
   },
   setServiceUnreadCount: (id, count) => {
-    const updated = get().services.map((s) => (s.id === id ? { ...s, unreadCount: count } : s))
-    set({ services: updated })
+    const existing = get().services.find((s) => s.id === id)
+    if (!existing || (existing.unreadCount ?? 0) === count) return
+    set({ services: get().services.map((s) => (s.id === id ? { ...s, unreadCount: count } : s)) })
   },
   updateDndConfig: async (config) => {
     const updated = { ...get().dndConfig, ...config }
@@ -149,11 +150,10 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   setDndActiveState: (active) => {
     set({ isDndActive: active })
   },
-  reorderServices: async (enabledServices) => {
+  // Local only; the drag-end handler persists once via saveServices
+  reorderServices: (enabledServices) => {
     const disabledServices = get().services.filter((s) => !s.enabled)
-    const updated = [...enabledServices, ...disabledServices]
-    set({ services: updated })
-    await window.api.saveServices(updated)
+    set({ services: [...enabledServices, ...disabledServices] })
   },
   setAppPin: async (pin: string) => {
     const success = await window.api.setAppPin(pin)

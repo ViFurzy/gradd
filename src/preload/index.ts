@@ -13,8 +13,10 @@ const api = {
   clearStorageData: (): Promise<void> => ipcRenderer.invoke('clear-storage-data'),
   showServiceContextMenu: (id: string): Promise<void> => ipcRenderer.invoke('show-service-context-menu', id),
   clearServiceStorageData: (id: string): Promise<void> => ipcRenderer.invoke('clear-service-storage-data', id),
-  onUnreadCountsUpdated: (callback: (data: any) => void): void => {
-    ipcRenderer.on('unread-counts-updated', (_event, data) => callback(data))
+  onUnreadCountsUpdated: (callback: (data: any) => void): (() => void) => {
+    const handler = (_event: unknown, data: any): void => callback(data)
+    ipcRenderer.on('unread-counts-updated', handler)
+    return () => { ipcRenderer.removeListener('unread-counts-updated', handler) }
   },
   updateTaskbarBadge: (dataUrl: string | null, description: string): Promise<void> =>
     ipcRenderer.invoke('update-taskbar-badge', dataUrl, description),
@@ -24,11 +26,15 @@ const api = {
   setDndConfig: (config: any): Promise<void> => ipcRenderer.invoke('set-dnd-config', config),
   getDndActive: (): Promise<boolean> => ipcRenderer.invoke('get-dnd-active'),
   doubleClickHeader: (): Promise<void> => ipcRenderer.invoke('double-click-header'),
-  onDndStatusChanged: (callback: (active: boolean) => void): void => {
-    ipcRenderer.on('dnd-status-changed', (_event, active) => callback(active))
+  onDndStatusChanged: (callback: (active: boolean) => void): (() => void) => {
+    const handler = (_event: unknown, active: any): void => callback(active)
+    ipcRenderer.on('dnd-status-changed', handler)
+    return () => { ipcRenderer.removeListener('dnd-status-changed', handler) }
   },
-  onServicesUpdated: (callback: (services: any[]) => void): void => {
-    ipcRenderer.on('services-updated', (_event, services) => callback(services))
+  onServicesUpdated: (callback: (services: any[]) => void): (() => void) => {
+    const handler = (_event: unknown, services: any): void => callback(services)
+    ipcRenderer.on('services-updated', handler)
+    return () => { ipcRenderer.removeListener('services-updated', handler) }
   },
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
   getActiveUserStats: (): Promise<{ dau: number; mau: number } | null> => ipcRenderer.invoke('get-active-user-stats'),
@@ -39,26 +45,38 @@ const api = {
   clearConfig: (): Promise<void> => ipcRenderer.invoke('clear-config'),
   checkForUpdates: (): Promise<void> => ipcRenderer.invoke('check-for-updates'),
   installUpdate: (): Promise<void> => ipcRenderer.invoke('install-update'),
-  onUpdateChecking: (callback: () => void): void => {
-    ipcRenderer.on('update-checking', () => callback())
+  onUpdateChecking: (callback: () => void): (() => void) => {
+    const handler = (): void => callback()
+    ipcRenderer.on('update-checking', handler)
+    return () => { ipcRenderer.removeListener('update-checking', handler) }
   },
-  onUpdateAvailable: (callback: (info: any) => void): void => {
-    ipcRenderer.on('update-available', (_e, info) => callback(info))
+  onUpdateAvailable: (callback: (info: any) => void): (() => void) => {
+    const handler = (_e: unknown, info: any): void => callback(info)
+    ipcRenderer.on('update-available', handler)
+    return () => { ipcRenderer.removeListener('update-available', handler) }
   },
-  onUpdateNotAvailable: (callback: (info: any) => void): void => {
-    ipcRenderer.on('update-not-available', (_e, info) => callback(info))
+  onUpdateNotAvailable: (callback: (info: any) => void): (() => void) => {
+    const handler = (_e: unknown, info: any): void => callback(info)
+    ipcRenderer.on('update-not-available', handler)
+    return () => { ipcRenderer.removeListener('update-not-available', handler) }
   },
-  onUpdateDownloaded: (callback: (info: any) => void): void => {
-    ipcRenderer.on('update-downloaded', (_e, info) => callback(info))
+  onUpdateDownloaded: (callback: (info: any) => void): (() => void) => {
+    const handler = (_e: unknown, info: any): void => callback(info)
+    ipcRenderer.on('update-downloaded', handler)
+    return () => { ipcRenderer.removeListener('update-downloaded', handler) }
   },
-  onUpdateError: (callback: (error: string) => void): void => {
-    ipcRenderer.on('update-error', (_e, err) => callback(err))
+  onUpdateError: (callback: (error: string) => void): (() => void) => {
+    const handler = (_e: unknown, err: any): void => callback(err)
+    ipcRenderer.on('update-error', handler)
+    return () => { ipcRenderer.removeListener('update-error', handler) }
   },
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('open-external', url),
   setAppPin: (pin: string): Promise<boolean> => ipcRenderer.invoke('set-app-pin', pin),
   verifyAppPin: (pin: string): Promise<boolean> => ipcRenderer.invoke('verify-app-pin', pin),
-  onLockApp: (callback: () => void): void => {
-    ipcRenderer.on('lock-app', () => callback())
+  onLockApp: (callback: () => void): (() => void) => {
+    const handler = (): void => callback()
+    ipcRenderer.on('lock-app', handler)
+    return () => { ipcRenderer.removeListener('lock-app', handler) }
   }
 }
 

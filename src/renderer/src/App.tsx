@@ -13,6 +13,7 @@ import {
   FloppyDisk,
   LockKey
 } from '@phosphor-icons/react'
+import { useShallow } from 'zustand/react/shallow'
 import { useLayoutStore } from './store/useLayoutStore'
 
 import messengerLogo from './assets/messenger.svg'
@@ -44,10 +45,30 @@ function App(): React.JSX.Element {
     generalConfig,
     isLocked,
     setLocked
-  } = useLayoutStore()
+  } = useLayoutStore(
+    useShallow((s) => ({
+      layoutMode: s.layoutMode,
+      setLayoutMode: s.setLayoutMode,
+      services: s.services,
+      activeServiceId: s.activeServiceId,
+      activePanel: s.activePanel,
+      selectService: s.selectService,
+      showDirectory: s.showDirectory,
+      showSettings: s.showSettings,
+      initialize: s.initialize,
+      setServiceUnreadCount: s.setServiceUnreadCount,
+      isDndActive: s.isDndActive,
+      setDndActiveState: s.setDndActiveState,
+      reorderServices: s.reorderServices,
+      generalConfig: s.generalConfig,
+      isLocked: s.isLocked,
+      setLocked: s.setLocked,
+    }))
+  )
   const [hoveredToggle, setHoveredToggle] = useState(false)
   const [draggedServiceId, setDraggedServiceId] = useState<string | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
+  const dragMovedRef = useRef(false)
 
   const totalUnreadCount = services
     .filter((s) => s.enabled && !s.muted)
@@ -59,21 +80,21 @@ function App(): React.JSX.Element {
 
   // Listen for unread count updates from Electron main process
   useEffect(() => {
-    window.api.onUnreadCountsUpdated((data) => {
+    return window.api.onUnreadCountsUpdated((data) => {
       setServiceUnreadCount(data.serviceId, data.count)
     })
   }, [setServiceUnreadCount])
 
   // Listen for DND status changes from Electron main process
   useEffect(() => {
-    window.api.onDndStatusChanged((active) => {
+    return window.api.onDndStatusChanged((active) => {
       setDndActiveState(active)
     })
   }, [setDndActiveState])
 
   // Listen for lock events
   useEffect(() => {
-    window.api.onLockApp(() => {
+    return window.api.onLockApp(() => {
       if (useLayoutStore.getState().generalConfig?.hasAppLock) {
         setLocked(true)
       }
@@ -82,7 +103,7 @@ function App(): React.JSX.Element {
 
   // Listen for services list updates from Electron main process (e.g. from context menus)
   useEffect(() => {
-    window.api.onServicesUpdated((updatedServices) => {
+    return window.api.onServicesUpdated((updatedServices) => {
       const currentServices = useLayoutStore.getState().services
       const merged = updatedServices.map((updated) => {
         const existing = currentServices.find((s) => s.id === updated.id)
@@ -126,7 +147,7 @@ function App(): React.JSX.Element {
         window.api.updateTaskbarBadge(dataUrl, `${totalUnreadCount} unread messages`)
       }
     }
-  }, [services, totalUnreadCount])
+  }, [totalUnreadCount])
 
   // Synchronize boundaries of the React container with the Electron WebContentsView
   useEffect(() => {
@@ -271,19 +292,26 @@ function App(): React.JSX.Element {
                         }}
                         draggable="true"
                         onDragStart={() => setDraggedServiceId(service.id)}
-                        onDragEnd={() => setDraggedServiceId(null)}
+                        onDragEnd={() => {
+                          setDraggedServiceId(null)
+                          if (dragMovedRef.current) {
+                            dragMovedRef.current = false
+                            window.api.saveServices(useLayoutStore.getState().services)
+                          }
+                        }}
                         onDragOver={(e) => {
                           e.preventDefault()
                           if (draggedServiceId === null || draggedServiceId === service.id) return
                           
                           const draggedIdx = enabledServices.findIndex((s) => s.id === draggedServiceId)
                           const hoverIdx = index
-                          if (draggedIdx === -1) return
+                          if (draggedIdx === -1 || hoverIdx === draggedIdx) return
                           
                           const updated = [...enabledServices]
                           const [draggedItem] = updated.splice(draggedIdx, 1)
                           updated.splice(hoverIdx, 0, draggedItem)
                           
+                          dragMovedRef.current = true
                           reorderServices(updated)
                         }}
                         className={`no-drag relative w-14 h-11 flex items-center justify-center transition-all duration-150 cursor-grab active:cursor-grabbing ${
@@ -412,19 +440,26 @@ function App(): React.JSX.Element {
                         }}
                         draggable="true"
                         onDragStart={() => setDraggedServiceId(service.id)}
-                        onDragEnd={() => setDraggedServiceId(null)}
+                        onDragEnd={() => {
+                          setDraggedServiceId(null)
+                          if (dragMovedRef.current) {
+                            dragMovedRef.current = false
+                            window.api.saveServices(useLayoutStore.getState().services)
+                          }
+                        }}
                         onDragOver={(e) => {
                           e.preventDefault()
                           if (draggedServiceId === null || draggedServiceId === service.id) return
                           
                           const draggedIdx = enabledServices.findIndex((s) => s.id === draggedServiceId)
                           const hoverIdx = index
-                          if (draggedIdx === -1) return
+                          if (draggedIdx === -1 || hoverIdx === draggedIdx) return
                           
                           const updated = [...enabledServices]
                           const [draggedItem] = updated.splice(draggedIdx, 1)
                           updated.splice(hoverIdx, 0, draggedItem)
                           
+                          dragMovedRef.current = true
                           reorderServices(updated)
                         }}
                         className={`no-drag relative h-full flex items-center gap-2 px-4 transition-all duration-150 cursor-grab active:cursor-grabbing border-b-2 ${
@@ -508,7 +543,7 @@ function App(): React.JSX.Element {
 }
 
 function DirectoryDashboard(): React.JSX.Element {
-  const { services, toggleService, selectService, toggleMuteService } = useLayoutStore()
+  const { services, toggleService, selectService, toggleMuteService } = useLayoutStore(useShallow((s) => ({ services: s.services, toggleService: s.toggleService, selectService: s.selectService, toggleMuteService: s.toggleMuteService })))
   const [clearingServiceIds, setClearingServiceIds] = useState<Record<string, boolean>>({})
 
   const handleClearService = async (serviceId: string, name: string): Promise<void> => {
@@ -649,7 +684,7 @@ function DirectoryDashboard(): React.JSX.Element {
 }
 
 function SettingsPanel(): React.JSX.Element {
-  const { dndConfig, isDndActive, updateDndConfig, generalConfig, updateGeneralConfig, layoutMode, setAppPin } = useLayoutStore()
+  const { dndConfig, isDndActive, updateDndConfig, generalConfig, updateGeneralConfig, layoutMode, setAppPin } = useLayoutStore(useShallow((s) => ({ dndConfig: s.dndConfig, isDndActive: s.isDndActive, updateDndConfig: s.updateDndConfig, generalConfig: s.generalConfig, updateGeneralConfig: s.updateGeneralConfig, layoutMode: s.layoutMode, setAppPin: s.setAppPin })))
   const [clearingState, setClearingState] = useState<'idle' | 'clearing' | 'success'>('idle')
   const [resetConfirming, setResetConfirming] = useState(false)
   const [appVersion, setAppVersion] = useState<string>('0.0.0')
@@ -667,18 +702,21 @@ function SettingsPanel(): React.JSX.Element {
       .then(setStats)
       .catch((err) => setStatsError(err.message))
 
-    window.api.onUpdateChecking(() => setCheckingState('checking'))
-    window.api.onUpdateAvailable(() => setCheckingState('available'))
-    window.api.onUpdateNotAvailable(() => {
-      setCheckingState('up-to-date')
-      setTimeout(() => setCheckingState('idle'), 5000)
-    })
-    window.api.onUpdateDownloaded(() => setCheckingState('downloaded'))
-    window.api.onUpdateError((err) => {
-      setCheckingState('error')
-      setUpdateError(err)
-      setTimeout(() => setCheckingState('idle'), 5000)
-    })
+    const unsubs = [
+      window.api.onUpdateChecking(() => setCheckingState('checking')),
+      window.api.onUpdateAvailable(() => setCheckingState('available')),
+      window.api.onUpdateNotAvailable(() => {
+        setCheckingState('up-to-date')
+        setTimeout(() => setCheckingState('idle'), 5000)
+      }),
+      window.api.onUpdateDownloaded(() => setCheckingState('downloaded')),
+      window.api.onUpdateError((err) => {
+        setCheckingState('error')
+        setUpdateError(err)
+        setTimeout(() => setCheckingState('idle'), 5000)
+      })
+    ]
+    return () => unsubs.forEach((u) => u())
   }, [])
 
   const handleCheckUpdates = (): void => {

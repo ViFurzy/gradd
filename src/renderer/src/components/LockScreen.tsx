@@ -1,11 +1,12 @@
 import React, { useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useLayoutStore } from '../store/useLayoutStore'
 import { LockKey, WarningCircle } from '@phosphor-icons/react'
 
 export default function LockScreen(): React.JSX.Element {
   const [pin, setPin] = useState('')
   const [error, setError] = useState(false)
-  const { setLocked, verifyAppPin } = useLayoutStore()
+  const { setLocked, verifyAppPin } = useLayoutStore(useShallow((s) => ({ setLocked: s.setLocked, verifyAppPin: s.verifyAppPin })))
 
   const handleKeyPress = async (num: string) => {
     if (error) {

@@ -49,8 +49,9 @@ let saveTimeout: NodeJS.Timeout | null = null
 let windowHiddenAt: number | null = null
 
 const serviceViews = new Map<string, WebContentsViewType>()
-// Tracks the last URL the user navigated to within each service (in-memory only, not persisted).
-const lastVisitedUrls = new Map<string, string>()
+// Last-visited URLs waiting to be written to the store (debounced; see flushLastVisited).
+const pendingLastVisited = new Map<string, string>()
+let lastVisitedTimer: NodeJS.Timeout | null = null
 // Tracks when each service was last viewed (ms). Used to throttle inactive renderers.
 const serviceLastActive = new Map<string, number>()
 const serviceUnreads = new Map<string, number>()
@@ -175,6 +176,17 @@ function getServiceDomains(type: string): string[] {
   }
 }
 
+function flushLastVisited(): void {
+  if (lastVisitedTimer) {
+    clearTimeout(lastVisitedTimer)
+    lastVisitedTimer = null
+  }
+  if (pendingLastVisited.size === 0) return
+  const existing = store.get('lastVisited') || {}
+  store.set('lastVisited', { ...existing, ...Object.fromEntries(pendingLastVisited) })
+  pendingLastVisited.clear()
+}
+
 function saveLastVisitedUrl(serviceId: string, url: string): void {
   try {
     const services = store.get('services') || []
@@ -188,9 +200,11 @@ function saveLastVisitedUrl(serviceId: string, url: string): void {
     const isAllowed = allowedDomains.some((d) => hostname === d || hostname.endsWith('.' + d))
     if (!isAllowed) return
 
-    lastVisitedUrls.set(serviceId, url)
-    const existing = store.get('lastVisited') || {}
-    store.set('lastVisited', { ...existing, [serviceId]: url })
+    const current = pendingLastVisited.get(serviceId) ?? (store.get('lastVisited') || {})[serviceId]
+    if (current === url) return
+    pendingLastVisited.set(serviceId, url)
+    if (lastVisitedTimer) clearTimeout(lastVisitedTimer)
+    lastVisitedTimer = setTimeout(flushLastVisited, 3000)
   } catch (error) {
     console.error(`Failed to save last visited URL for service ${serviceId}:`, error)
   }
@@ -752,12 +766,7 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
       }
 
       // Service domain routing: load own-domain URLs in the parent view
-      const serviceDomains: Record<string, string[]> = {
-        whatsapp: ['whatsapp.com', 'whatsapp.net'],
-        telegram: ['telegram.org', 'telegram.me', 't.me'],
-        messenger: ['messenger.com', 'facebook.com']
-      }
-      const domains = serviceDomains[service.type]
+      const domains = ['whatsapp', 'telegram', 'messenger'].includes(service.type) ? getServiceDomains(service.type) : null
       if (domains && domains.some((d) => hostname === d || hostname.endsWith('.' + d))) {
         view.webContents.loadURL(url).catch((err) => console.error('Failed to load service URL in view:', err))
         return { action: 'deny' }
@@ -1025,7 +1034,7 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
   view.webContents.setAudioMuted(isMuted)
 
   const lastVisited = store.get('lastVisited') || {}
-  const homeUrl = lastVisited[serviceId] ?? defaultServices.find((s) => s.id === serviceId)?.url ?? service.url
+  const homeUrl = pendingLastVisited.get(serviceId) ?? lastVisited[serviceId] ?? defaultServices.find((s) => s.id === serviceId)?.url ?? service.url
   view.webContents.loadURL(homeUrl).catch(console.error)
   serviceViews.set(serviceId, view)
   serviceLastActive.set(serviceId, Date.now())
@@ -1877,6 +1886,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  flushLastVisited()
   // Destroy all WebContentsViews to release Chromium renderer processes
   for (const [, view] of serviceViews) {
     try {

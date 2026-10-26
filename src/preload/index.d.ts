@@ -19,15 +19,15 @@ export interface GraddAPI {
   clearStorageData(): Promise<void>
   showServiceContextMenu(id: string): Promise<void>
   clearServiceStorageData(id: string): Promise<void>
-  onUnreadCountsUpdated(callback: (data: { serviceId: string; count: number }) => void): void
+  onUnreadCountsUpdated(callback: (data: { serviceId: string; count: number }) => void): () => void
   updateTaskbarBadge(dataUrl: string | null, description: string): Promise<void>
   showNativeNotification(title: string, body: string): Promise<void>
   getDndConfig(): Promise<DndConfig>
   setDndConfig(config: DndConfig): Promise<void>
   getDndActive(): Promise<boolean>
   doubleClickHeader(): Promise<void>
-  onDndStatusChanged(callback: (active: boolean) => void): void
-  onServicesUpdated(callback: (services: ServiceConfig[]) => void): void
+  onDndStatusChanged(callback: (active: boolean) => void): () => void
+  onServicesUpdated(callback: (services: ServiceConfig[]) => void): () => void
   getAppVersion(): Promise<string>
   getActiveUserStats(): Promise<{ dau: number; mau: number } | null>
   getGeneralConfig(): Promise<{ closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean; hasAppLock: boolean }>
@@ -37,15 +37,15 @@ export interface GraddAPI {
   clearConfig(): Promise<void>
   checkForUpdates(): Promise<void>
   installUpdate(): Promise<void>
-  onUpdateChecking(callback: () => void): void
-  onUpdateAvailable(callback: (info: any) => void): void
-  onUpdateNotAvailable(callback: (info: any) => void): void
-  onUpdateDownloaded(callback: (info: any) => void): void
-  onUpdateError(callback: (error: string) => void): void
+  onUpdateChecking(callback: () => void): () => void
+  onUpdateAvailable(callback: (info: any) => void): () => void
+  onUpdateNotAvailable(callback: (info: any) => void): () => void
+  onUpdateDownloaded(callback: (info: any) => void): () => void
+  onUpdateError(callback: (error: string) => void): () => void
   openExternal(url: string): Promise<void>
   setAppPin(pin: string): Promise<boolean>
   verifyAppPin(pin: string): Promise<boolean>
-  onLockApp(callback: () => void): void
+  onLockApp(callback: () => void): () => void
 }
 
 export interface DndConfig {
