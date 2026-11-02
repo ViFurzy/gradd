@@ -13,6 +13,7 @@ import linkedinLogo from './assets/linkedin.svg'
 import teamsLogo from './assets/teams.svg'
 import logoImg from './assets/logo.png'
 import LockScreen from './components/LockScreen'
+import { accountColor } from '../../shared/accountColors'
 import DirectoryDashboard from './components/DirectoryDashboard'
 import SettingsPanel from './components/SettingsPanel'
 
@@ -58,6 +59,9 @@ function App(): React.JSX.Element {
   const [draggedServiceId, setDraggedServiceId] = useState<string | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const dragMovedRef = useRef(false)
+
+  // Accounts of one service share an icon, so give them a color dot to tell them apart
+  const hasSiblings = (type: string): boolean => services.filter((s) => s.type === type).length > 1
 
   const totalUnreadCount = services
     .filter((s) => s.enabled && !s.muted)
@@ -328,6 +332,13 @@ function App(): React.JSX.Element {
                           <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent rounded-r-[2px]" />
                         )}
                         {getServiceIcon(service.type)}
+                        {hasSiblings(service.type) && (
+                          <span
+                            className="absolute bottom-1.5 right-2 w-2 h-2 rounded-full border border-secondary"
+                            style={{ background: accountColor(services, service.id) }}
+                            aria-hidden="true"
+                          />
+                        )}
                         {/* Unread badge */}
                         {service.unreadCount && service.unreadCount > 0 && !service.muted ? (
                           <div className="absolute top-1.5 right-2 min-w-[15px] h-3.5 bg-destructive text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 shadow border border-secondary leading-none select-none">
@@ -479,6 +490,13 @@ function App(): React.JSX.Element {
                         <span className="flex items-center text-[15px]">
                           {getServiceIcon(service.type)}
                         </span>
+                        {hasSiblings(service.type) && (
+                          <span
+                            className="w-1.5 h-1.5 rounded-full shrink-0"
+                            style={{ background: accountColor(services, service.id) }}
+                            aria-hidden="true"
+                          />
+                        )}
                         {generalConfig?.showTabLabels !== false && (
                           <span className="text-xs font-normal leading-[1.4]">{service.name}</span>
                         )}

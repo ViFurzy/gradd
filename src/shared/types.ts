@@ -17,6 +17,8 @@ export interface ServiceConfig {
   url: string
   enabled: boolean
   muted?: boolean
+  // Accent for telling accounts of one service apart (#rrggbb); unset = palette default
+  color?: string
 }
 
 export interface DndConfig {

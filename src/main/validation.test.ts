@@ -167,3 +167,21 @@ describe('validateServiceList', () => {
     expect(validateImportedConfig({ services: [svc(), svc()] }).valid).toBe(false)
   })
 })
+
+describe('service color', () => {
+  it.each(['#4fb3a5', '#AABBCC'])('accepts %s', (color) => {
+    expect(validateService(svc({ color }))).toBeNull()
+  })
+
+  it.each([['red'], ['#fff'], ['#12345g'], ['rgb(1,2,3)'], [5]])('rejects %s', (color) => {
+    expect(validateService(svc({ color }))).toEqual(expect.any(String))
+  })
+
+  it('sanitizeService keeps a string color and omits it otherwise', () => {
+    expect(sanitizeService(svc({ color: '#4fb3a5' }) as unknown as ServiceConfig)).toHaveProperty(
+      'color',
+      '#4fb3a5'
+    )
+    expect(sanitizeService(svc() as unknown as ServiceConfig)).not.toHaveProperty('color')
+  })
+})

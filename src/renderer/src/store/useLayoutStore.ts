@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { DndConfig, ServiceConfig as SharedServiceConfig } from '../../../shared/types'
+import { ACCOUNT_COLORS } from '../../../shared/accountColors'
 
 export type { DndConfig }
 
@@ -28,6 +29,7 @@ interface LayoutState {
   addServiceInstance: (sourceId: string) => Promise<void>
   removeServiceInstance: (id: string) => Promise<void>
   renameService: (id: string, name: string) => Promise<void>
+  setServiceColor: (id: string, color: string) => Promise<void>
   showDirectory: () => Promise<void>
   showSettings: () => Promise<void>
   initialize: () => Promise<void>
@@ -106,9 +108,11 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     do {
       id = `${source.type}-${Math.random().toString(36).slice(2, 8)}`
     } while (services.some((s) => s.id === id))
+    const siblings = services.filter((s) => s.type === source.type).length
     const added: ServiceConfig = {
       id,
-      name: `${base.name} ${services.filter((s) => s.type === source.type).length + 1}`,
+      name: `${base.name} ${siblings + 1}`,
+      color: ACCOUNT_COLORS[siblings % ACCOUNT_COLORS.length],
       type: source.type,
       url: base.url,
       enabled: true,
@@ -125,6 +129,11 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     if (!target || target.id === target.type) return // built-in entries can't be removed
     if (get().activeServiceId === id) await get().selectService(null)
     const updated = get().services.filter((s) => s.id !== id)
+    set({ services: updated })
+    await window.api.saveServices(updated)
+  },
+  setServiceColor: async (id, color) => {
+    const updated = get().services.map((s) => (s.id === id ? { ...s, color } : s))
     set({ services: updated })
     await window.api.saveServices(updated)
   },

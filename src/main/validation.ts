@@ -24,6 +24,8 @@ export function validateService(svc: unknown): string | null {
     return 'Service "muted" must be a boolean.'
   if (!ALLOWED_SERVICE_TYPES.includes(s.type as string))
     return `Service type "${s.type}" is not recognised.`
+  if (s.color !== undefined && (typeof s.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(s.color)))
+    return 'Service "color" must be a #rrggbb hex value.'
   if (typeof s.url !== 'string') return 'Service "url" must be a string.'
   try {
     const parsed = new URL(s.url as string)
@@ -67,7 +69,8 @@ export const sanitizeService = (s: ServiceConfig): ServiceConfig => ({
   type: s.type,
   url: s.url,
   enabled: s.enabled,
-  ...(typeof s.muted === 'boolean' ? { muted: s.muted } : {})
+  ...(typeof s.muted === 'boolean' ? { muted: s.muted } : {}),
+  ...(typeof s.color === 'string' ? { color: s.color } : {})
 })
 
 export function validateImportedConfig(data: unknown): { valid: boolean; reason?: string } {
