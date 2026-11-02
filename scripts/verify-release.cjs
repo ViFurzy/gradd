@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type -- plain CommonJS build script, not app code */
 // Guards `npm run build:win` so a broken or stale release can't be published.
 //   node scripts/verify-release.cjs --pre   refuse to build while Gradd runs from the output folder
 //   node scripts/verify-release.cjs [dir]   check installer, update feed and packaged app (default: dist)
@@ -16,12 +17,16 @@ if (process.argv.includes('--pre')) {
   const ps = `Get-Process 'Gradd*' -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '${dir}*' } | Select-Object -First 1 -ExpandProperty Path`
   let running = ''
   try {
-    running = execFileSync('powershell', ['-NoProfile', '-Command', ps], { encoding: 'utf8' }).trim()
+    running = execFileSync('powershell', ['-NoProfile', '-Command', ps], {
+      encoding: 'utf8'
+    }).trim()
   } catch {
     // PowerShell unavailable: skip the check, electron-builder will still report EBUSY if it matters
   }
   if (running) {
-    console.error(`Gradd is running from ${running}\nQuit it (also from the system tray) and build again.`)
+    console.error(
+      `Gradd is running from ${running}\nQuit it (also from the system tray) and build again.`
+    )
     process.exit(1)
   }
   process.exit(0)
@@ -45,14 +50,18 @@ const feed = need('latest.yml')
 if (feed) {
   const text = fs.readFileSync(feed, 'utf8')
   // `size` only appears in the indented files entry; the others also exist at top level
-  const field = (key) => ((text.match(new RegExp('^\\s*' + key + ': (.+)$', 'm')) || [])[1] || '').trim()
-  if (field('version') !== version) problems.push(`latest.yml is for ${field('version')}, expected ${version}`)
-  if (field('path') !== setupName) problems.push(`latest.yml points to ${field('path')}, expected ${setupName}`)
+  const field = (key) =>
+    ((text.match(new RegExp('^\\s*' + key + ': (.+)$', 'm')) || [])[1] || '').trim()
+  if (field('version') !== version)
+    problems.push(`latest.yml is for ${field('version')}, expected ${version}`)
+  if (field('path') !== setupName)
+    problems.push(`latest.yml points to ${field('path')}, expected ${setupName}`)
   if (setup) {
     const bytes = fs.readFileSync(setup)
     if (field('sha512') !== crypto.createHash('sha512').update(bytes).digest('base64'))
       problems.push('latest.yml sha512 does not match the installer')
-    if (Number(field('size')) !== bytes.length) problems.push('latest.yml size does not match the installer')
+    if (Number(field('size')) !== bytes.length)
+      problems.push('latest.yml size does not match the installer')
   }
 }
 
@@ -61,12 +70,17 @@ const asar = path.join(dir, 'win-unpacked', 'resources', 'app.asar')
 if (!fs.existsSync(asar)) {
   problems.push('missing win-unpacked/resources/app.asar')
 } else {
-  const packaged = JSON.parse(require('@electron/asar').extractFile(asar, 'package.json').toString())
-  if (packaged.version !== version) problems.push(`packaged app is ${packaged.version}, expected ${version}`)
+  const packaged = JSON.parse(
+    require('@electron/asar').extractFile(asar, 'package.json').toString()
+  )
+  if (packaged.version !== version)
+    problems.push(`packaged app is ${packaged.version}, expected ${version}`)
 }
 
 if (problems.length) {
   console.error(`Release ${version} in ${dir} is NOT consistent:\n - ${problems.join('\n - ')}`)
   process.exit(1)
 }
-console.log(`Release ${version} verified: installer, blockmap, portable, update feed and packaged app all match.`)
+console.log(
+  `Release ${version} verified: installer, blockmap, portable, update feed and packaged app all match.`
+)
