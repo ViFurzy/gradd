@@ -18,7 +18,9 @@
     "build": "npm run typecheck && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
+    "prebuild:win": "node scripts/verify-release.cjs --pre",
     "build:win": "npm run build && electron-builder --win",
+    "postbuild:win": "node scripts/verify-release.cjs",
     "test:e2e": "playwright test",
     "test:unit": "vitest run --exclude \"tests/**\""
   },
