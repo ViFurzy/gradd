@@ -1879,6 +1879,9 @@ app.whenReady().then(() => {
           // Scrape is best-effort; the next poll retries
         })
 
+      // e2e runs must not raise real Windows toasts: Electron registers a Start menu shortcut for
+      // the toast's app id, which would litter the developer's Start menu (and repoint Gradd's).
+      if (process.env.GRADD_E2E === '1') return
       if (dndActive || !allowToast(serviceId)) return
       try {
         // Added accounts share a type, so name the account to tell their toasts apart
