@@ -4,7 +4,7 @@
   <p><strong>All your messaging apps in one place - the app Rambox should have been.</strong></p>
   <p>
     <img src="https://img.shields.io/badge/platform-Windows-blue?style=flat-square&logo=windows" alt="Platform" />
-    <img src="https://img.shields.io/badge/electron-39.x-47848F?style=flat-square&logo=electron" alt="Electron" />
+    <img src="https://img.shields.io/badge/electron-45.x-47848F?style=flat-square&logo=electron" alt="Electron" />
     <img src="https://img.shields.io/badge/react-19.x-61DAFB?style=flat-square&logo=react" alt="React" />
     <img src="https://img.shields.io/badge/typescript-5.x-3178C6?style=flat-square&logo=typescript" alt="TypeScript" />
     <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" />
@@ -27,6 +27,8 @@ Gradd is a Windows desktop application that aggregates multiple messaging platfo
 ## Features
 
 - **Multi-service aggregation** - Switch between WhatsApp, Telegram, Messenger, Slack, Instagram, and Gadu-Gadu from a unified sidebar or tab bar.
+- **Multiple accounts per service** - Add several Messenger, Instagram, WhatsApp... accounts side by side, rename them, and give each a color dot. Each account has its own isolated session.
+- **Save RAM** - Idle services unload after 5 minutes and wake every 5 minutes to check for new messages, so notifications still arrive. Turn it off in Settings to keep every service live.
 - **Complete session isolation** - Every service uses its own Chromium partition (`persist:service-<id>`), so cookies, storage, and credentials are fully sandboxed.
 - **Local Backup & Restore** - Export and import your full configuration as a JSON file without cloud credentials.
 - **Do Not Disturb** - Toggle DND manually or set a recurring schedule (supports midnight wrap). Mutes all audio and blocks OS notifications while active.
@@ -45,7 +47,7 @@ Download the latest release from the [Releases](https://github.com/ViFurzy/gradd
 | Package | Description |
 |---------|-------------|
 | `gradd-app-x.x.x-setup.exe` | NSIS installer - recommended, creates Start Menu shortcut |
-| `gradd-app-x.x.x.exe` | Portable - no install needed, runs from any folder |
+| `Gradd.x.x.x.exe` | Portable - no install needed, runs from any folder |
 
 > **Note:** Windows may show a SmartScreen warning on first launch because the binary is not EV code-signed yet. Click **More info → Run anyway** to proceed.
 
