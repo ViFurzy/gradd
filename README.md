@@ -18,7 +18,9 @@ Gradd is a Windows desktop application that aggregates multiple messaging platfo
 ## Screenshots
 
 <div align="center">
-  <img src="./docs/screenshot-services.png" alt="Services Directory" width="80%" />
+  <img src="./docs/screenshot-services.png" alt="Services Directory with multiple accounts" width="80%" />
+  <br /><br />
+  <img src="./docs/screenshot-settings.png" alt="Settings with Save RAM" width="80%" />
   <br /><br />
 </div>
 
