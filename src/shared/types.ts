@@ -29,6 +29,7 @@ export interface DndConfig {
 export interface GeneralConfig {
   closeToTray: boolean
   showTabLabels: boolean
+  saveRam: boolean
   startWithWindows: boolean
 }
 

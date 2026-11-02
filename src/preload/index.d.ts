@@ -46,6 +46,7 @@ export interface GraddAPI {
   setAppPin(pin: string, currentPin?: string): Promise<boolean>
   verifyAppPin(pin: string): Promise<{ ok: boolean; retryAfterMs?: number }>
   onLockApp(callback: () => void): () => void
+  onSelectService(callback: (id: string) => void): () => void
 }
 
 declare global {

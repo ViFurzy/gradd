@@ -120,6 +120,13 @@ const api = {
     return () => {
       ipcRenderer.removeListener('lock-app', handler)
     }
+  },
+  onSelectService: (callback: (id: string) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, id: string): void => callback(id)
+    ipcRenderer.on('select-service', handler)
+    return () => {
+      ipcRenderer.removeListener('select-service', handler)
+    }
   }
 }
 

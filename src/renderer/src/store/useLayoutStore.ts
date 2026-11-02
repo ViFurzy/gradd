@@ -15,6 +15,7 @@ interface LayoutState {
   generalConfig: {
     closeToTray: boolean
     showTabLabels: boolean
+    saveRam: boolean
     startWithWindows: boolean
     hasAppLock?: boolean
   }
@@ -24,6 +25,9 @@ interface LayoutState {
   selectService: (id: string | null) => Promise<void>
   toggleService: (id: string) => Promise<void>
   toggleMuteService: (id: string) => Promise<void>
+  addServiceInstance: (sourceId: string) => Promise<void>
+  removeServiceInstance: (id: string) => Promise<void>
+  renameService: (id: string, name: string) => Promise<void>
   showDirectory: () => Promise<void>
   showSettings: () => Promise<void>
   initialize: () => Promise<void>
@@ -34,7 +38,12 @@ interface LayoutState {
   setDndActiveState: (active: boolean) => void
   reorderServices: (enabledServices: ServiceConfig[]) => void
   updateGeneralConfig: (
-    config: Partial<{ closeToTray: boolean; showTabLabels: boolean; startWithWindows: boolean }>
+    config: Partial<{
+      closeToTray: boolean
+      showTabLabels: boolean
+      saveRam: boolean
+      startWithWindows: boolean
+    }>
   ) => Promise<void>
   setAppPin: (pin: string, currentPin?: string) => Promise<boolean>
   verifyAppPin: (pin: string) => Promise<{ ok: boolean; retryAfterMs?: number }>
@@ -51,7 +60,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     startTime: '22:00',
     endTime: '08:00'
   },
-  generalConfig: { closeToTray: true, showTabLabels: true, startWithWindows: false },
+  generalConfig: { closeToTray: true, showTabLabels: true, saveRam: true, startWithWindows: false },
   isDndActive: false,
   isLocked: false,
   setLocked: (locked) => set({ isLocked: locked }),
@@ -83,6 +92,46 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   },
   toggleMuteService: async (id) => {
     const updated = get().services.map((s) => (s.id === id ? { ...s, muted: !s.muted } : s))
+    set({ services: updated })
+    await window.api.saveServices(updated)
+  },
+  // Another account of the same service: same type and home URL, its own id (so its own
+  // isolated session partition). Built-in entries have id === type; added ones do not.
+  addServiceInstance: async (sourceId) => {
+    const { services } = get()
+    const source = services.find((s) => s.id === sourceId)
+    if (!source) return
+    const base = services.find((s) => s.id === source.type) ?? source
+    let id: string
+    do {
+      id = `${source.type}-${Math.random().toString(36).slice(2, 8)}`
+    } while (services.some((s) => s.id === id))
+    const added: ServiceConfig = {
+      id,
+      name: `${base.name} ${services.filter((s) => s.type === source.type).length + 1}`,
+      type: source.type,
+      url: base.url,
+      enabled: true,
+      muted: false,
+      unreadCount: 0
+    }
+    const at = services.map((s) => s.type).lastIndexOf(source.type) + 1
+    const updated = [...services.slice(0, at), added, ...services.slice(at)]
+    set({ services: updated })
+    await window.api.saveServices(updated)
+  },
+  removeServiceInstance: async (id) => {
+    const target = get().services.find((s) => s.id === id)
+    if (!target || target.id === target.type) return // built-in entries can't be removed
+    if (get().activeServiceId === id) await get().selectService(null)
+    const updated = get().services.filter((s) => s.id !== id)
+    set({ services: updated })
+    await window.api.saveServices(updated)
+  },
+  renameService: async (id, name) => {
+    const trimmed = name.trim().slice(0, 60)
+    if (!trimmed) return
+    const updated = get().services.map((s) => (s.id === id ? { ...s, name: trimmed } : s))
     set({ services: updated })
     await window.api.saveServices(updated)
   },

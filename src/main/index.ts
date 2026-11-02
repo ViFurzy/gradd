@@ -29,6 +29,15 @@ import { store, initStore, defaultServices } from './store.js'
 import type { AppConfig } from './store.js'
 import type { DndConfig, ServiceConfig } from '../shared/types'
 import { hashPin, verifyPin } from './crypto.js'
+import { isTimeInSchedule } from './schedule.js'
+import { getServiceDomains } from './domains.js'
+import { createRateLimiter } from './rateLimit.js'
+import {
+  validateServiceList,
+  validateDnd,
+  sanitizeService,
+  validateImportedConfig
+} from './validation.js'
 import { recordHeartbeat, getActiveUserStats } from './firebase.js'
 import pkg from 'electron-updater'
 let isDev = false // set in app.whenReady
@@ -123,16 +132,6 @@ function openSafe(url: string): void {
 }
 let dndActive = false
 
-function isTimeInSchedule(current: string, start: string, end: string): boolean {
-  if (start === end) return false
-  if (start < end) {
-    return current >= start && current < end
-  } else {
-    // Spans midnight (e.g. 22:00 to 08:00)
-    return current >= start || current < end
-  }
-}
-
 function applyDndState(): void {
   // Mute or unmute all service views based on DND active state or per-service mute settings
   const services = store.get('services') || []
@@ -183,29 +182,6 @@ function evaluateDndState(): void {
     }
   } catch (error) {
     console.error('Failed to evaluate DND state:', error)
-  }
-}
-
-function getServiceDomains(type: string): string[] {
-  switch (type) {
-    case 'messenger':
-      return ['messenger.com', 'facebook.com']
-    case 'whatsapp':
-      return ['whatsapp.com', 'whatsapp.net']
-    case 'telegram':
-      return ['telegram.org', 'telegram.me', 't.me']
-    case 'slack':
-      return ['slack.com']
-    case 'instagram':
-      return ['instagram.com']
-    case 'gadugadu':
-      return ['gg.pl']
-    case 'linkedin':
-      return ['linkedin.com']
-    case 'teams':
-      return ['teams.microsoft.com', 'microsoft.com', 'microsoftonline.com', 'login.windows.net']
-    default:
-      return []
   }
 }
 
@@ -788,7 +764,28 @@ const IDLE_UNLOAD_MS = 5 * 60 * 1000
 // for IDLE_UNLOAD_MS, returning its renderer memory to the OS. The active tab
 // is never touched. Recreation happens lazily via getOrCreateView on the next
 // switch-service — this function only tears down, it never recreates/reloads.
+function unloadServiceView(serviceId: string): void {
+  const view = serviceViews.get(serviceId)
+  try {
+    if (view && !view.webContents.isDestroyed()) {
+      if (mainWindow) mainWindow.contentView.removeChildView(view)
+      destroyView(view)
+    }
+  } catch {
+    /* ignore */
+  }
+  serviceViews.delete(serviceId)
+  serviceLastActive.delete(serviceId)
+  serviceZeroStreak.delete(serviceId)
+}
+
+// "Save RAM" (Settings > General). On by default; off = views are never unloaded.
+function isSaveRamOn(): boolean {
+  return store.get('general')?.saveRam !== false
+}
+
 function unloadIdleServiceViews(): void {
+  if (!isSaveRamOn()) return
   const now = Date.now()
   // Snapshot keys first to avoid mutating the map while iterating.
   for (const serviceId of [...serviceViews.keys()]) {
@@ -796,23 +793,127 @@ function unloadIdleServiceViews(): void {
     const lastActive = serviceLastActive.get(serviceId) ?? 0
     if (now - lastActive <= IDLE_UNLOAD_MS) continue
 
-    const view = serviceViews.get(serviceId)
-    try {
-      if (view && !view.webContents.isDestroyed()) {
-        if (mainWindow) mainWindow.contentView.removeChildView(view)
-        destroyView(view)
-      }
-    } catch {
-      /* ignore */
-    }
-    serviceViews.delete(serviceId)
-    serviceLastActive.delete(serviceId)
-    serviceZeroStreak.delete(serviceId)
+    unloadServiceView(serviceId)
     console.log(
       `[Main] Unloaded idle service view '${serviceId}' (inactive for ${Math.round((now - lastActive) / 1000)}s)`
     )
   }
 }
+
+// --- Save RAM wake cycle ---
+// Unloaded services can't receive messages, so every WAKE_INTERVAL_MS each one is loaded
+// off-screen one at a time, given a short window to sync, then unloaded again.
+// ponytail: sequential + fixed window; a slow-syncing service may need a longer WAKE_MAX_MS.
+const WAKE_INTERVAL_MS = 5 * 60 * 1000
+const WAKE_MIN_MS = 15 * 1000
+const WAKE_MAX_MS = 40 * 1000
+const WAKE_POLL_MS = 3000
+// Services whose page already showed its own toast; the wake summary toast is skipped for them.
+const pageNotified = new Set<string>()
+let wakeCycleRunning = false
+
+async function wakeService(serviceId: string): Promise<void> {
+  const service = (store.get('services') || []).find((s) => s.id === serviceId)
+  if (!service || !mainWindow) return
+  const before = serviceUnreads.get(serviceId) || 0
+  pageNotified.delete(serviceId)
+
+  const view = getOrCreateView(serviceId)
+  if (!view) return
+  // Off-screen (not detached) like inactive tabs, so the page stays 'visible' and syncs.
+  mainWindow.contentView.addChildView(view)
+  view.setBounds({ x: -10000, y: -10000, width: 1280, height: 800 })
+
+  // Poll once the page has loaded; stop as soon as two scrapes in a row agree.
+  const start = Date.now()
+  let last = -1
+  while (Date.now() - start < WAKE_MAX_MS) {
+    await new Promise((resolve) => setTimeout(resolve, WAKE_POLL_MS))
+    if (view.webContents.isDestroyed()) break
+    if (Date.now() - start < WAKE_MIN_MS || view.webContents.isLoading()) continue
+    const count = await scrapeUnreadCount(view, service.type, serviceUnreads.get(serviceId) || 0)
+    if (count === last) break
+    last = count
+  }
+
+  if (!view.webContents.isDestroyed() && last >= 0) {
+    serviceZeroStreak.set(serviceId, 2) // a settled 0 is trustworthy: clear the badge now
+    handleUnreadCountChange(serviceId, last)
+  }
+
+  // Only notify on growth since before the wake, so reloads never replay old unread counts.
+  const after = serviceUnreads.get(serviceId) || 0
+  if (after > before && !pageNotified.has(serviceId) && !dndActive) {
+    try {
+      const notif = new Notification({
+        title: service.name,
+        body: `${after} unread message${after === 1 ? '' : 's'}`,
+        silent: false
+      })
+      notif.on('click', () => {
+        mainWindow?.show()
+        mainWindow?.focus()
+      })
+      notif.show()
+    } catch {
+      // Notification is best-effort
+    }
+  }
+
+  // The user may have opened this service mid-wake: keep it live then.
+  if (serviceId !== activeServiceId) unloadServiceView(serviceId)
+}
+
+async function runWakeCycle(): Promise<void> {
+  if (wakeCycleRunning || !isSaveRamOn()) return
+  wakeCycleRunning = true
+  try {
+    const visited = store.get('lastVisited') || {}
+    for (const service of store.get('services') || []) {
+      if (!isSaveRamOn()) break
+      // Never opened = nothing to sync; waking would just reload a login/QR page every cycle.
+      if (!visited[service.id] && !pendingLastVisited.has(service.id)) continue
+      // Live services (recently active) already receive messages; only wake the unloaded ones.
+      if (!service.enabled || service.id === activeServiceId || serviceViews.has(service.id))
+        continue
+      await wakeService(service.id).catch(() => unloadServiceView(service.id))
+    }
+  } finally {
+    wakeCycleRunning = false
+  }
+}
+
+// Replaces window.Notification in the page so every web notification goes through Gradd
+// (DND gate + rate limit + immediate rescrape) via the preload's __graddNotify.
+const NOTIFICATION_STUB = `
+(function() {
+  if (window.__graddNotifStub || typeof window.__graddNotify !== 'function') return;
+  var Orig = window.Notification;
+  if (!Orig) return;
+  window.__graddNotifStub = true;
+  var notify = window.__graddNotify;
+  class GraddNotification extends EventTarget {
+    constructor(title, opts) {
+      super();
+      opts = opts || {};
+      this.title = String(title);
+      this.body = opts.body ? String(opts.body) : '';
+      this.tag = opts.tag || '';
+      this.data = opts.data;
+      this.onclick = this.onclose = this.onerror = this.onshow = null;
+      if (Orig.permission === 'granted') notify(this.title, this.body);
+    }
+    close() {}
+  }
+  GraddNotification.requestPermission = Orig.requestPermission.bind(Orig);
+  Object.defineProperty(GraddNotification, 'permission', { get: function() { return Orig.permission; } });
+  GraddNotification.maxActions = Orig.maxActions;
+  window.Notification = GraddNotification;
+})();
+`
+
+// At most 5 toasts per service per 10s: a misbehaving or hostile page can't flood the desktop.
+const allowToast = createRateLimiter(5, 10_000)
 
 const CHROME_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
@@ -860,7 +961,7 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
   const view = new WebContentsView({
     webPreferences: {
       partition: `persist:service-${service.id}`,
-      preload: join(__dirname, '../preload/service-bridge.mjs'),
+      preload: join(__dirname, '../preload/service-bridge.cjs'),
       sandbox: true,
       backgroundThrottling: false
     }
@@ -1163,6 +1264,13 @@ function getOrCreateView(serviceId: string): WebContentsViewType | null {
     })
   }
 
+  // Installed via executeJavaScript (not an injected <script>) so strict page CSPs can't block it.
+  view.webContents.on('dom-ready', () => {
+    view.webContents.executeJavaScript(NOTIFICATION_STUB).catch(() => {
+      // Best-effort page script; failure (e.g. view destroyed) is non-fatal
+    })
+  })
+
   // Suppress the Windows USB security key dialog on services that don't need WebAuthn.
   // Skipped for Slack — users with JumpCloud/Okta SSO need real hardware key auth.
   // The preload script-tag injection is blocked by strict CSP on pages like accounts.meta.com;
@@ -1327,8 +1435,8 @@ function createWindow(): void {
     backgroundColor: '#0f0f11',
     icon: nativeImage.createFromPath(icon),
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
-      sandbox: false
+      preload: join(__dirname, '../preload/index.cjs'),
+      sandbox: true
     }
   })
 
@@ -1447,104 +1555,6 @@ function createTray(): void {
   updateTrayMenu()
 }
 
-const ALLOWED_SERVICE_TYPES = [
-  'messenger',
-  'whatsapp',
-  'telegram',
-  'slack',
-  'instagram',
-  'gadugadu',
-  'linkedin',
-  'teams'
-]
-
-function validateService(svc: unknown): string | null {
-  if (!svc || typeof svc !== 'object') return 'Each service must be an object.'
-  const s = svc as Record<string, unknown>
-  if (typeof s.id !== 'string' || !s.id) return 'Service "id" must be a non-empty string.'
-  if (typeof s.name !== 'string' || !s.name) return 'Service "name" must be a non-empty string.'
-  if (typeof s.enabled !== 'boolean') return 'Service "enabled" must be a boolean.'
-  if (s.muted !== undefined && typeof s.muted !== 'boolean')
-    return 'Service "muted" must be a boolean.'
-  if (!ALLOWED_SERVICE_TYPES.includes(s.type as string))
-    return `Service type "${s.type}" is not recognised.`
-  if (typeof s.url !== 'string') return 'Service "url" must be a string.'
-  try {
-    const parsed = new URL(s.url as string)
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
-      return `Service URL "${s.url}" must use http or https.`
-  } catch {
-    return `Service URL "${s.url}" is not a valid URL.`
-  }
-  return null
-}
-
-function validateDnd(dnd: unknown): string | null {
-  if (!dnd || typeof dnd !== 'object' || Array.isArray(dnd)) return '"dnd" must be an object.'
-  const d = dnd as Record<string, unknown>
-  if (typeof d.manualActive !== 'boolean') return '"dnd.manualActive" must be a boolean.'
-  if (typeof d.scheduleEnabled !== 'boolean') return '"dnd.scheduleEnabled" must be a boolean.'
-  if (typeof d.startTime !== 'string' || !/^\d{2}:\d{2}$/.test(d.startTime as string))
-    return '"dnd.startTime" must be HH:MM format.'
-  if (typeof d.endTime !== 'string' || !/^\d{2}:\d{2}$/.test(d.endTime as string))
-    return '"dnd.endTime" must be HH:MM format.'
-  return null
-}
-
-// Keep only known fields (drops renderer-only transient state such as unreadCount).
-const sanitizeService = (s: ServiceConfig): ServiceConfig => ({
-  id: s.id,
-  name: s.name,
-  type: s.type,
-  url: s.url,
-  enabled: s.enabled,
-  ...(typeof s.muted === 'boolean' ? { muted: s.muted } : {})
-})
-
-function validateImportedConfig(data: unknown): { valid: boolean; reason?: string } {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    return { valid: false, reason: 'Root value must be an object.' }
-  }
-  const obj = data as Record<string, unknown>
-
-  if (obj.services !== undefined) {
-    if (!Array.isArray(obj.services))
-      return { valid: false, reason: '"services" must be an array.' }
-    for (const svc of obj.services) {
-      const reason = validateService(svc)
-      if (reason) return { valid: false, reason }
-    }
-  }
-
-  if (obj.dnd !== undefined) {
-    const reason = validateDnd(obj.dnd)
-    if (reason) return { valid: false, reason }
-  }
-
-  if (obj.layout !== undefined) {
-    if (typeof obj.layout !== 'object' || Array.isArray(obj.layout))
-      return { valid: false, reason: '"layout" must be an object.' }
-    const layout = obj.layout as Record<string, unknown>
-    if (layout.mode !== undefined && layout.mode !== 'sidebar' && layout.mode !== 'tabs') {
-      return { valid: false, reason: '"layout.mode" must be "sidebar" or "tabs".' }
-    }
-  }
-
-  if (obj.general !== undefined) {
-    if (typeof obj.general !== 'object' || Array.isArray(obj.general))
-      return { valid: false, reason: '"general" must be an object.' }
-    const general = obj.general as Record<string, unknown>
-    if (general.closeToTray !== undefined && typeof general.closeToTray !== 'boolean') {
-      return { valid: false, reason: '"general.closeToTray" must be a boolean.' }
-    }
-    if (general.showTabLabels !== undefined && typeof general.showTabLabels !== 'boolean') {
-      return { valid: false, reason: '"general.showTabLabels" must be a boolean.' }
-    }
-  }
-
-  return { valid: true }
-}
-
 // Block Ctrl+R / Ctrl+Shift+R / F5 across every webContents (main window + all service views)
 app.on('web-contents-created', (_, contents) => {
   contents.on('before-input-event', (event, input) => {
@@ -1565,7 +1575,9 @@ app.whenReady().then(() => {
     installId = randomUUID()
     store.set('installId', installId)
   }
-  recordHeartbeat(installId, app.getVersion()).catch(console.error)
+  // e2e runs (GRADD_E2E=1) must not write fake installs into the real DAU/MAU data
+  if (process.env.GRADD_E2E !== '1')
+    recordHeartbeat(installId, app.getVersion()).catch(console.error)
 
   const { autoUpdater } = pkg
 
@@ -1597,17 +1609,37 @@ app.whenReady().then(() => {
       console.error('save-services rejected: payload must be an array')
       return false
     }
-    for (const svc of payload) {
-      const reason = validateService(svc)
-      if (reason) {
-        console.error('save-services rejected:', reason)
-        return false
-      }
+    const listError = validateServiceList(payload)
+    if (listError) {
+      console.error('save-services rejected:', listError)
+      return false
     }
     const services = payload.map(sanitizeService)
     const previousServices = store.get('services') || []
     store.set('services', services)
     applyDndState()
+
+    // Accounts removed from the list: tear down the view and, for added accounts (not the
+    // built-in entries, which come back on launch), wipe their now-orphaned session data.
+    for (const prev of previousServices) {
+      if (services.some((s) => s.id === prev.id)) continue
+      unloadServiceView(prev.id)
+      serviceUnreads.delete(prev.id)
+      pendingLastVisited.delete(prev.id)
+      const lastVisited = { ...(store.get('lastVisited') || {}) }
+      if (prev.id in lastVisited) {
+        delete lastVisited[prev.id]
+        store.set('lastVisited', lastVisited)
+      }
+      if (!defaultServices.some((d) => d.id === prev.id)) {
+        session
+          .fromPartition(`persist:service-${prev.id}`)
+          .clearStorageData()
+          .catch((err) =>
+            console.error(`Failed to clear data for removed service ${prev.id}:`, err)
+          )
+      }
+    }
 
     // Destroy WebContentsViews for services that have been disabled to free Chromium memory
     for (const prev of previousServices) {
@@ -1741,9 +1773,10 @@ app.whenReady().then(() => {
         label: 'Refresh',
         click: () => {
           const view = serviceViews.get(id)
-          const defaultService = defaultServices.find((s) => s.id === id)
-          if (view && defaultService && !view.webContents.isDestroyed()) {
-            view.webContents.loadURL(defaultService.url).catch(console.error)
+          // Added accounts have no built-in default; their own stored URL is the home page.
+          const home = defaultServices.find((s) => s.id === id) ?? service
+          if (view && home && !view.webContents.isDestroyed()) {
+            view.webContents.loadURL(home.url).catch(console.error)
           }
         }
       },
@@ -1829,37 +1862,43 @@ app.whenReady().then(() => {
   ipcMain.on(
     'service-notification',
     (event, payload: { title?: unknown; body?: unknown } | null | undefined) => {
-      const title = String(payload?.title ?? '').slice(0, 200)
-      const body = String(payload?.body ?? '').slice(0, 1000)
-      // Show native toast
-      if (!dndActive) {
-        try {
-          const notif = new Notification({ title, body, silent: false })
-          notif.on('click', () => {
-            mainWindow?.show()
-            mainWindow?.focus()
-          })
-          notif.show()
-        } catch {
-          // Notification is best-effort; failing to show a toast must not break the handler
-        }
-      }
-      // Identify the sending service and rescrape immediately
-      for (const [serviceId, view] of serviceViews) {
-        if (view.webContents.id === event.sender.id) {
-          const services = store.get('services') || []
-          const service = services.find((s) => s.id === serviceId)
-          if (service) {
-            scrapeUnreadCount(view, service.type, serviceUnreads.get(serviceId) || 0)
-              .then((count) => {
-                handleUnreadCountChange(serviceId, count)
-              })
-              .catch(() => {
-                // Scrape is best-effort; the next poll retries
-              })
-          }
-          break
-        }
+      // Only service views may raise toasts; ignore anything else
+      const entry = [...serviceViews].find(([, v]) => v.webContents.id === event.sender.id)
+      if (!entry) return
+      const [serviceId, view] = entry
+      const service = (store.get('services') || []).find((s) => s.id === serviceId)
+      if (!service) return
+      pageNotified.add(serviceId)
+
+      // Rescrape immediately so the badge updates (regardless of DND)
+      scrapeUnreadCount(view, service.type, serviceUnreads.get(serviceId) || 0)
+        .then((count) => {
+          handleUnreadCountChange(serviceId, count)
+        })
+        .catch(() => {
+          // Scrape is best-effort; the next poll retries
+        })
+
+      if (dndActive || !allowToast(serviceId)) return
+      try {
+        // Added accounts share a type, so name the account to tell their toasts apart
+        const pageTitle = String(payload?.title ?? '')
+        const notif = new Notification({
+          title: (service.id === service.type ? pageTitle : `${service.name}: ${pageTitle}`).slice(
+            0,
+            200
+          ),
+          body: String(payload?.body ?? '').slice(0, 1000),
+          silent: false
+        })
+        notif.on('click', () => {
+          mainWindow?.show()
+          mainWindow?.focus()
+          mainWindow?.webContents.send('select-service', serviceId)
+        })
+        notif.show()
+      } catch {
+        // Notification is best-effort; failing to show a toast must not break the handler
       }
     }
   )
@@ -1935,17 +1974,22 @@ app.whenReady().then(() => {
     return {
       closeToTray: saved.closeToTray !== false,
       showTabLabels: saved.showTabLabels !== false,
+      saveRam: saved.saveRam !== false,
       startWithWindows: app.getLoginItemSettings().openAtLogin,
       hasAppLock: !!saved.appLockPin
     }
   })
 
   ipcMain.handle('set-general-config', (_, config) => {
-    const { startWithWindows, closeToTray, showTabLabels } = config as Record<string, unknown>
+    const { startWithWindows, closeToTray, showTabLabels, saveRam } = config as Record<
+      string,
+      unknown
+    >
     // Merge only whitelisted booleans so the stored PIN survives and renderer-only keys (hasAppLock) never persist
     const general = { ...(store.get('general') || {}) } as Record<string, unknown>
     if (typeof closeToTray === 'boolean') general.closeToTray = closeToTray
     if (typeof showTabLabels === 'boolean') general.showTabLabels = showTabLabels
+    if (typeof saveRam === 'boolean') general.saveRam = saveRam
     delete general.hasAppLock
     store.set('general', general as AppConfig['general'])
     if (typeof startWithWindows === 'boolean') {
@@ -2079,6 +2123,7 @@ app.whenReady().then(() => {
         if (typeof incoming.closeToTray === 'boolean') merged.closeToTray = incoming.closeToTray
         if (typeof incoming.showTabLabels === 'boolean')
           merged.showTabLabels = incoming.showTabLabels
+        if (typeof incoming.saveRam === 'boolean') merged.saveRam = incoming.saveRam
         store.set('general', merged)
       }
 
@@ -2158,6 +2203,9 @@ app.whenReady().then(() => {
 
   // Periodically unload service views idle for longer than IDLE_UNLOAD_MS to free renderer memory
   setInterval(unloadIdleServiceViews, 60000)
+
+  // Save RAM: briefly wake unloaded services so their notifications still arrive
+  setInterval(runWakeCycle, WAKE_INTERVAL_MS)
 
   createWindow()
   createTray()

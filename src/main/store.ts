@@ -21,6 +21,7 @@ export interface AppConfig {
   general: {
     closeToTray: boolean
     showTabLabels?: boolean
+    saveRam?: boolean
     appLockPin?: string
   }
   lastVisited?: Record<string, string>
