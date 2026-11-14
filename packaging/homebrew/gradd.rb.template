@@ -1,0 +1,41 @@
+cask "gradd" do
+  version "__VERSION__"
+  sha256 "__SHA256__"
+
+  url "https://github.com/ViFurzy/gradd/releases/download/v#{version}/gradd-app-#{version}-universal.dmg"
+  name "Gradd"
+  desc "Messaging aggregator for Messenger, WhatsApp, Telegram, Slack and more"
+  homepage "https://github.com/ViFurzy/gradd"
+
+  # Electron 44 dropped macOS 12 (Chromium requirement), so Electron 45 needs macOS 13 Ventura.
+  depends_on macos: ">= :ventura"
+
+  app "Gradd.app"
+
+  # Unsigned build: strip the quarantine flag so Gatekeeper allows launch.
+  # REMOVE this block once builds are signed and notarized.
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-cr", "#{appdir}/Gradd.app"]
+  end
+
+  # Do NOT add `auto_updates true` while the app is unsigned: electron-updater
+  # (Squirrel.Mac) cannot update an unsigned app, so brew must own upgrades.
+  # Add `auto_updates true` once the app is signed and notarized and in-app
+  # updates work on macOS.
+
+  caveats <<~EOS
+    This build is not signed or notarized by Apple. The quarantine flag is
+    removed on install. Upgrade with: brew upgrade --cask gradd
+  EOS
+
+  zap trash: [
+    "~/Library/Application Support/Gradd",
+    "~/Library/Caches/Gradd",
+    "~/Library/Caches/com.gradd.app",
+    "~/Library/Caches/com.gradd.app.ShipIt",
+    "~/Library/Logs/Gradd",
+    "~/Library/Preferences/com.gradd.app.plist",
+    "~/Library/Saved Application State/com.gradd.app.savedState",
+  ]
+end

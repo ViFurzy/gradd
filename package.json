@@ -20,6 +20,7 @@
     "build:unpack": "npm run build && electron-builder --dir",
     "prebuild:win": "node scripts/verify-release.cjs --pre",
     "build:win": "npm run build && electron-builder --win",
+    "build:mac": "npm run build && electron-builder --mac",
     "postbuild:win": "node scripts/verify-release.cjs",
     "test:e2e": "playwright test",
     "test:unit": "vitest run --exclude \"tests/**\""

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type -- plain CommonJS build script, not app code */
 // Guards `npm run build:win` so a broken or stale release can't be published.
 //   node scripts/verify-release.cjs --pre   refuse to build while Gradd runs from the output folder
+//   node scripts/verify-release.cjs --mac [dir]   check the universal dmg, zip and update feed of a mac build
 //   node scripts/verify-release.cjs [dir]   check installer, update feed and packaged app (default: dist)
 const fs = require('fs')
 const path = require('path')
@@ -38,6 +39,28 @@ const need = (file) => {
   if (fs.existsSync(p)) return p
   problems.push(`missing ${file}`)
   return null
+}
+
+if (process.argv.includes('--mac')) {
+  need(`gradd-app-${version}-universal.dmg`)
+  const zip =
+    fs.existsSync(dir) &&
+    fs.readdirSync(dir).some((f) => f.endsWith(`${version}-universal-mac.zip`))
+  if (!zip) problems.push('missing mac zip')
+  const macFeed = path.join(dir, 'latest-mac.yml')
+  if (fs.existsSync(macFeed)) {
+    const v = (fs.readFileSync(macFeed, 'utf8').match(/^version: (.+)$/m) || [])[1]
+    if ((v || '').trim() !== version)
+      problems.push(`latest-mac.yml is for ${v}, expected ${version}`)
+  }
+  if (problems.length) {
+    console.error(
+      `Mac release ${version} in ${dir} is NOT consistent:\n - ${problems.join('\n - ')}`
+    )
+    process.exit(1)
+  }
+  console.log(`Mac release ${version} verified`)
+  process.exit(0)
 }
 
 const setupName = `gradd-app-${version}-setup.exe`

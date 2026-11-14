@@ -22,6 +22,25 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+mac:
+  category: public.app-category.social-networking
+  icon: build/icon-mac.png
+  target:
+    - target: dmg
+      arch: [universal]
+    - target: zip
+      arch: [universal]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # enable once Apple Developer signing/notarization secrets exist (CI builds are unsigned)
+  notarize: false
+  extendInfo:
+    NSMicrophoneUsageDescription: Messaging services in Gradd use the microphone for voice messages and calls.
+    NSCameraUsageDescription: Messaging services in Gradd use the camera for video calls.
+dmg:
+  artifactName: ${name}-${version}-${arch}.${ext}
 npmRebuild: false
 publish:
   provider: github

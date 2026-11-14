@@ -10,6 +10,7 @@ import type {
 
 // Custom APIs for renderer
 const api = {
+  platform: process.platform,
   getLayoutMode: (): Promise<'sidebar' | 'tabs'> => ipcRenderer.invoke('get-layout-mode'),
   setLayoutMode: (mode: 'sidebar' | 'tabs'): Promise<void> =>
     ipcRenderer.invoke('set-layout-mode', mode),

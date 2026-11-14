@@ -17,6 +17,8 @@ import { accountColor } from '../../shared/accountColors'
 import DirectoryDashboard from './components/DirectoryDashboard'
 import SettingsPanel from './components/SettingsPanel'
 
+const isMac = window.api.platform === 'darwin'
+
 function App(): React.JSX.Element {
   const {
     layoutMode,
@@ -228,7 +230,7 @@ function App(): React.JSX.Element {
       {/* 32px custom titlebar drag region */}
       <header
         onDoubleClick={() => window.api.doubleClickHeader()}
-        className="h-8 min-h-8 bg-secondary border-b border-surface-border flex items-center justify-between px-4 drag"
+        className={`h-8 min-h-8 bg-secondary border-b border-surface-border flex items-center justify-between drag ${isMac ? 'pl-20 pr-4' : 'px-4'}`}
       >
         <div className="flex items-center gap-2">
           <img
@@ -250,7 +252,7 @@ function App(): React.JSX.Element {
           )}
         </div>
         {/* Reservation for native Windows control overlay on the right */}
-        <div className="w-[140px]" />
+        {!isMac && <div className="w-[140px]" />}
       </header>
 
       {/* Main Container */}
