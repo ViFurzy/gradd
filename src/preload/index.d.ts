@@ -10,6 +10,7 @@ import type {
 export type { DndConfig, ServiceConfig }
 
 export interface GraddAPI {
+  platform: string
   getLayoutMode(): Promise<'sidebar' | 'tabs'>
   setLayoutMode(mode: 'sidebar' | 'tabs'): Promise<void>
   getServices(): Promise<ServiceConfig[]>

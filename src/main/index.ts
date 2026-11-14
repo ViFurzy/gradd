@@ -25,6 +25,7 @@ import { fileURLToPath } from 'url'
 import { readFileSync, writeFileSync } from 'fs'
 import { randomUUID } from 'crypto'
 import icon from '../../resources/icon.png?asset'
+import trayTemplateIcon from '../../resources/trayTemplate.png?asset'
 import { store, initStore, defaultServices } from './store.js'
 import type { AppConfig } from './store.js'
 import type { DndConfig, ServiceConfig } from '../shared/types'
@@ -65,7 +66,15 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 // without a real lock or Electron hide/minimize — which flips visibilityState to hidden inside
 // embedded service views and causes SPAs like Telegram Web to tear down their render loop
 // (goes solid black until manually reloaded).
-app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
+// Chromium takes disable-features only once, so every feature goes in one list. On macOS the
+// equivalent is MacWebContentsOcclusion (feature name unverified: confirm on a real Mac; it targets
+// service views going blank when the window is occluded).
+app.commandLine.appendSwitch(
+  'disable-features',
+  process.platform === 'darwin'
+    ? 'CalculateNativeWinOcclusion,MacWebContentsOcclusion'
+    : 'CalculateNativeWinOcclusion'
+)
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -916,7 +925,9 @@ const NOTIFICATION_STUB = `
 const allowToast = createRateLimiter(5, 10_000)
 
 const CHROME_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
+  process.platform === 'darwin'
+    ? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
+    : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
 
 // Opens an in-partition BrowserWindow for OAuth flows that are blocked in embedded WebContentsView.
 // Google and others check the UA / renderer context and reject the embedded origin.
@@ -1426,11 +1437,16 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#1a1a1f',
-      symbolColor: '#e8e8ec',
-      height: 32
-    },
+    // macOS: native traffic lights; Windows: custom control overlay
+    ...(process.platform === 'darwin'
+      ? { trafficLightPosition: { x: 12, y: 10 } }
+      : {
+          titleBarOverlay: {
+            color: '#1a1a1f',
+            symbolColor: '#e8e8ec',
+            height: 32
+          }
+        }),
     transparent: false,
     backgroundColor: '#0f0f11',
     icon: nativeImage.createFromPath(icon),
@@ -1540,25 +1556,37 @@ function createWindow(): void {
 }
 
 function createTray(): void {
-  const trayImg = nativeImage.createFromPath(icon)
-  // Scale down for tray icon display sizing if needed
-  tray = new Tray(trayImg.resize({ width: 16, height: 16 }))
-  tray.setToolTip('Gradd')
-
-  tray.on('double-click', () => {
+  const showWindow = (): void => {
     if (mainWindow) {
       mainWindow.show()
       mainWindow.focus()
     }
-  })
+  }
+  if (process.platform === 'darwin') {
+    // Template image: macOS tints it for light/dark menu bars; the @2x sibling loads automatically
+    const trayImg = nativeImage.createFromPath(trayTemplateIcon)
+    trayImg.setTemplateImage(true)
+    tray = new Tray(trayImg)
+    tray.on('click', showWindow)
+  } else {
+    const trayImg = nativeImage.createFromPath(icon)
+    // Scale down for tray icon display sizing if needed
+    tray = new Tray(trayImg.resize({ width: 16, height: 16 }))
+    tray.on('double-click', showWindow)
+  }
+  tray.setToolTip('Gradd')
 
   updateTrayMenu()
 }
 
-// Block Ctrl+R / Ctrl+Shift+R / F5 across every webContents (main window + all service views)
+// Block Ctrl+R / Ctrl+Shift+R (Cmd+R on macOS) / F5 across every webContents (main window + all service views)
 app.on('web-contents-created', (_, contents) => {
   contents.on('before-input-event', (event, input) => {
-    if ((input.control && (input.key === 'r' || input.key === 'R')) || input.key === 'F5') {
+    if (
+      ((input.control || (process.platform === 'darwin' && input.meta)) &&
+        (input.key === 'r' || input.key === 'R')) ||
+      input.key === 'F5'
+    ) {
       event.preventDefault()
     }
   })
@@ -1833,6 +1861,12 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('update-taskbar-badge', (event, dataUrl: string | null, description: string) => {
+    if (process.platform === 'darwin') {
+      // ponytail: count parsed from the renderer's "N unread messages" description to avoid changing the IPC signature
+      const n = dataUrl ? parseInt(String(description), 10) || 0 : 0
+      app.dock?.setBadge(n ? String(n) : '')
+      return
+    }
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
 
@@ -2228,6 +2262,8 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
+    } else {
+      mainWindow?.show()
     }
   })
 })
