@@ -26,6 +26,7 @@ import { readFileSync, writeFileSync } from 'fs'
 import { randomUUID } from 'crypto'
 import icon from '../../resources/icon.png?asset'
 import trayTemplateIcon from '../../resources/trayTemplate.png?asset'
+import trayTemplateIcon2x from '../../resources/trayTemplate@2x.png?asset'
 import { store, initStore, defaultServices } from './store.js'
 import type { AppConfig } from './store.js'
 import type { DndConfig, ServiceConfig } from '../shared/types'
@@ -1563,8 +1564,13 @@ function createTray(): void {
     }
   }
   if (process.platform === 'darwin') {
-    // Template image: macOS tints it for light/dark menu bars; the @2x sibling loads automatically
+    // Template image: macOS tints it for light/dark menu bars. ?asset hashes filenames in builds,
+    // so the @2x sibling is not auto-discovered: attach it explicitly.
     const trayImg = nativeImage.createFromPath(trayTemplateIcon)
+    trayImg.addRepresentation({
+      scaleFactor: 2,
+      buffer: nativeImage.createFromPath(trayTemplateIcon2x).toPNG()
+    })
     trayImg.setTemplateImage(true)
     tray = new Tray(trayImg)
     tray.on('click', showWindow)

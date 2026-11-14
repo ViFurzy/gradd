@@ -245,7 +245,7 @@ export default function SettingsPanel(): React.JSX.Element {
                 Start at login
               </h3>
               <p className="text-xs text-text-muted mt-1 leading-[1.4] max-w-[450px]">
-                When enabled, Gradd launches automatically when you log in to Windows.
+                When enabled, Gradd launches automatically when you log in to your computer.
               </p>
             </div>
             <button
